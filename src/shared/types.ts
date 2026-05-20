@@ -266,9 +266,9 @@ export interface SavedAction {
 export interface Routine {
   id: string
   name: string
-  description: string  // AI explanation at save time
+  description: string // AI explanation at save time
   actions: SavedAction[]
-  createdAt: number    // Date.now()
+  createdAt: number // Date.now()
 }
 
 // ── Routines messages ─────────────────────────────────────────────────────────

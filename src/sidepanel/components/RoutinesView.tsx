@@ -25,7 +25,9 @@ export function RoutinesView({ routines, onRun, onDelete }: Props) {
     <div className="routines-view">
       <div className="routines-header">
         <span className="routines-count">
-          {routines.length === 0 ? 'No routines' : `${routines.length} routine${routines.length === 1 ? '' : 's'}`}
+          {routines.length === 0
+            ? 'No routines'
+            : `${routines.length} routine${routines.length === 1 ? '' : 's'}`}
         </span>
         <button className="btn-ghost" onClick={() => setShowImport(true)}>
           Import JSON
@@ -35,7 +37,9 @@ export function RoutinesView({ routines, onRun, onDelete }: Props) {
       {routines.length === 0 ? (
         <div className="routines-empty">
           <p>Complete a task in Chat, then click</p>
-          <p><strong>Save as Routine</strong> to save it here.</p>
+          <p>
+            <strong>Save as Routine</strong> to save it here.
+          </p>
         </div>
       ) : (
         <ul className="routines-list">
@@ -45,15 +49,12 @@ export function RoutinesView({ routines, onRun, onDelete }: Props) {
                 <span className="routine-name">{r.name}</span>
                 <span className="routine-desc">{r.description}</span>
                 <span className="routine-meta">
-                  {r.actions.length} action{r.actions.length === 1 ? '' : 's'} · {relativeDate(r.createdAt)}
+                  {r.actions.length} action{r.actions.length === 1 ? '' : 's'} ·{' '}
+                  {relativeDate(r.createdAt)}
                 </span>
               </div>
               <div className="routine-actions">
-                <button
-                  className="btn-run"
-                  onClick={() => onRun(r.id)}
-                  title="Run this routine"
-                >
+                <button className="btn-run" onClick={() => onRun(r.id)} title="Run this routine">
                   ▶
                 </button>
                 <button
@@ -71,9 +72,7 @@ export function RoutinesView({ routines, onRun, onDelete }: Props) {
         </ul>
       )}
 
-      {showImport && (
-        <ImportRoutineModal onClose={() => setShowImport(false)} />
-      )}
+      {showImport && <ImportRoutineModal onClose={() => setShowImport(false)} />}
     </div>
   )
 }

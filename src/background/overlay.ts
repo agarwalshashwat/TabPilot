@@ -3,12 +3,12 @@
 // preventing the user from accidentally clicking/typing and corrupting agent state.
 // All DOM functions must be self-contained (no imports, no outer-scope references).
 
-const OVERLAY_ID = 'tab-ai-pilot-overlay'
+const OVERLAY_ID = 'tabpilot-overlay'
 
 // ── DOM functions (run inside the page) ───────────────────────────────────────
 
 function domInjectOverlay(): void {
-  const ID = 'tab-ai-pilot-overlay'
+  const ID = 'tabpilot-overlay'
   if (document.getElementById(ID)) return // already injected
 
   const style = `
@@ -52,7 +52,7 @@ function domInjectOverlay(): void {
 
   const label = document.createElement('div')
   label.setAttribute('style', labelStyle)
-  label.textContent = '⚡ Tab AI Pilot is working…'
+  label.textContent = '⚡ TabPilot is working…'
   overlay.appendChild(label)
 
   // Block all pointer and keyboard events
@@ -64,7 +64,7 @@ function domInjectOverlay(): void {
 }
 
 function domRemoveOverlay(): void {
-  document.getElementById('tab-ai-pilot-overlay')?.remove()
+  document.getElementById('tabpilot-overlay')?.remove()
 }
 
 // ── Extension-side wrappers ───────────────────────────────────────────────────
@@ -95,9 +95,7 @@ export async function removeAllOverlays(): Promise<void> {
   try {
     const tabs = await chrome.tabs.query({})
     await Promise.allSettled(
-      tabs
-        .filter((t) => t.id != null && t.url?.startsWith('http'))
-        .map((t) => removeOverlay(t.id!)),
+      tabs.filter((t) => t.id != null && t.url?.startsWith('http')).map((t) => removeOverlay(t.id!))
     )
   } catch {
     // Best-effort cleanup.

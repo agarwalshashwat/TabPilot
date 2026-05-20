@@ -1,6 +1,41 @@
-# Tab AI Pilot
+<p align="center">
+  <img src="public/branding/logo-light.png" alt="TabPilot Logo" width="220" />
+</p>
 
-Chrome extension sidepanel that uses AI to plan and execute tab actions.
+# TabPilot
+
+<p align="center"><b>Your browser. Your agent.</b></p>
+
+# TabPilot
+
+TabPilot is a free, open-source Chrome extension that uses local AI (Gemini Nano) to plan and execute tab actions—no cloud, no fees, no data sharing. Boost your productivity and privacy with AI-powered tab automation, right in your browser.
+
+## Why Open Source?
+
+TabPilot is open source to empower users with transparency, privacy, and control. By making the code public, we:
+
+- Enable community-driven innovation
+- Build trust—no hidden data collection
+- Let anyone audit, contribute, or extend the project
+- Keep the core experience free for everyone
+
+## How to Contribute
+
+We welcome contributions of all kinds! You can:
+
+- Suggest features or report bugs via [GitHub Issues](https://github.com/agarwalshashwat/TabPilot/issues)
+- Join discussions and share ideas in [GitHub Discussions](https://github.com/agarwalshashwat/TabPilot/discussions)
+- Submit pull requests for code, docs, or tests
+- Help with translations, design, or outreach
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Community & Support
+
+- **Website:** [https://yourdomain.com/tabpilot](https://yourdomain.com/tabpilot) <!-- Update with your subdomain -->
+- **GitHub Discussions:** [TabPilot Discussions](https://github.com/agarwalshashwat/TabPilot/discussions)
+- **Sponsor:** [GitHub Sponsors](https://github.com/sponsors/agarwalshashwat) <!-- Update if enabled -->
+- **Contact:** Open an issue or join the discussion!
 
 ## Features
 
@@ -28,38 +63,54 @@ Chrome extension sidepanel that uses AI to plan and execute tab actions.
 
 ## Development Setup
 
-1. Install dependencies:
+1. Install Node.js 22.x (required):
+
+```bash
+# if you use nvm
+nvm install 22
+nvm use 22
+```
+
+2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-2. Start dev server:
+3. Start dev server:
 
 ```bash
 npm run dev
 ```
 
-3. In Chrome:
+4. In Chrome:
 
 - Open `chrome://extensions`
 - Enable Developer mode
 - Load unpacked extension from this project (or CRXJS-generated output, depending on your dev flow)
+
+### Version Guardrails
+
+- This repo enforces `Node 22.12+` during `npm install`.
+- If install fails with a Node version message, switch to Node 22 and re-run `npm install`.
 
 ## Debugging And Logs
 
 When a task appears to stop early or return incomplete output, inspect these first:
 
 1. Service worker logs (primary runtime source)
-- `chrome://extensions` -> Tab AI Pilot -> `Service worker` -> `Inspect`
+
+- `chrome://extensions` -> TabPilot -> `Service worker` -> `Inspect`
 - This shows worker-side errors and message flow.
 
 2. Sidepanel logs (UI message handling)
+
 - Open the extension sidepanel
 - Right-click inside panel -> `Inspect`
 - Check Console for incoming message handling issues.
 
 3. In-panel execution trace
+
 - `ACTION_PROGRESS`, `TASK_COMPLETE`, and `TASK_ERROR` are reflected in the action log/status UI.
 
 ### Console Log Prefixes
@@ -76,10 +127,10 @@ The app now emits structured logs with consistent prefixes:
 Each module currently uses a local constant named `DEBUG_LOGS`.
 
 - Logs are disabled by default for production safety. Set `DEBUG_LOGS = true` in these files only for local debugging:
-	- `src/background/worker.ts`
-	- `src/background/ai.ts`
-	- `src/background/executor.ts`
-	- `src/sidepanel/hooks/useChromeMessages.ts`
+  - `src/background/worker.ts`
+  - `src/background/ai.ts`
+  - `src/background/executor.ts`
+  - `src/sidepanel/hooks/useChromeMessages.ts`
 
 ## Port Disconnect Handling
 
@@ -155,6 +206,8 @@ Current suite status: `6 passed`.
 ## Architecture Doc
 
 System design notes are documented in `docs/guides/architecture.md`.
+
+---
 
 ## Notes
 

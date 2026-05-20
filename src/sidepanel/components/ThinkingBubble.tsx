@@ -40,7 +40,9 @@ export function ThinkingBubble({ rawJson }: Props) {
     <div className="thinking-bubble">
       <div className="thinking-header">
         <span className="thinking-dots">
-          <span /><span /><span />
+          <span />
+          <span />
+          <span />
         </span>
         <span className="thinking-label">Thinking…</span>
       </div>
@@ -53,7 +55,10 @@ export function ThinkingBubble({ rawJson }: Props) {
       ) : (
         // No explanation extracted yet — model is generating the opening JSON
         rawJson.length > 0 && (
-          <p className="thinking-raw">{rawJson.slice(0, 120)}{rawJson.length > 120 ? '…' : ''}</p>
+          <p className="thinking-raw">
+            {rawJson.slice(0, 120)}
+            {rawJson.length > 120 ? '…' : ''}
+          </p>
         )
       )}
       <div ref={bottomRef} />

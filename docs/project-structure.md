@@ -1,7 +1,7 @@
 # Project Structure
 
 ```
-tab-ai-pilot/
+tabpilot/
   .github/                  GitHub templates and workflow automation
   docs/                     Architecture, readiness, and contributor docs
     guides/                 In-depth technical guides

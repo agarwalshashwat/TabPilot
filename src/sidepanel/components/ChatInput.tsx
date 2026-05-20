@@ -11,7 +11,15 @@ interface Props {
   onRephrase: () => void
 }
 
-export function ChatInput({ onSubmit, onCancel, disabled, availability, value, onChange, onRephrase }: Props) {
+export function ChatInput({
+  onSubmit,
+  onCancel,
+  disabled,
+  availability,
+  value,
+  onChange,
+  onRephrase,
+}: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = useCallback(() => {
@@ -27,7 +35,7 @@ export function ChatInput({ onSubmit, onCancel, disabled, availability, value, o
         handleSubmit()
       }
     },
-    [handleSubmit],
+    [handleSubmit]
   )
 
   const handleChange = useCallback(
@@ -38,7 +46,7 @@ export function ChatInput({ onSubmit, onCancel, disabled, availability, value, o
       el.style.height = 'auto'
       el.style.height = `${el.scrollHeight}px`
     },
-    [onChange],
+    [onChange]
   )
 
   const placeholder =
@@ -95,9 +103,7 @@ export function ChatInput({ onSubmit, onCancel, disabled, availability, value, o
           </div>
         )}
       </div>
-      {!disabled && (
-        <p className="input-hint">Enter to send · Shift+Enter for newline</p>
-      )}
+      {!disabled && <p className="input-hint">Enter to send · Shift+Enter for newline</p>}
     </div>
   )
 }

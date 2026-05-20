@@ -38,8 +38,7 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
     })
   }, [])
 
-  const update = (patch: Partial<AISettings>) =>
-    setSettings((prev) => ({ ...prev, ...patch }))
+  const update = (patch: Partial<AISettings>) => setSettings((prev) => ({ ...prev, ...patch }))
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -130,7 +129,9 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
                 onChange={(e) => update({ openaiModel: e.target.value })}
               >
                 {OPENAI_MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </select>
             </div>
@@ -169,7 +170,9 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
                 onChange={(e) => update({ anthropicModel: e.target.value })}
               >
                 {ANTHROPIC_MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </select>
             </div>
@@ -208,7 +211,9 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
                 onChange={(e) => update({ geminiModel: e.target.value })}
               >
                 {GEMINI_MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </select>
             </div>
@@ -216,7 +221,9 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
         )}
 
         <div className="modal-buttons">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
           <button className="btn-primary" onClick={handleSave} disabled={isSaving}>
             {isSaving ? 'Saving…' : 'Save'}
           </button>

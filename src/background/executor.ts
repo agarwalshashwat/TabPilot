@@ -20,9 +20,7 @@ const SELECTION_POLICY = {
 // These functions run in the page's ISOLATED world. They must be self-contained:
 // no imports, no references to the extension's outer scope.
 
-function domClick(
-  selector: string,
-): {
+function domClick(selector: string): {
   success: boolean
   error?: string
   picked?: string
@@ -61,7 +59,8 @@ function domClick(
   }
 
   const isEnabled = (el: HTMLElement): boolean => {
-    const disabledLike = (el as HTMLInputElement).disabled || el.getAttribute('aria-disabled') === 'true'
+    const disabledLike =
+      (el as HTMLInputElement).disabled || el.getAttribute('aria-disabled') === 'true'
     return !disabledLike
   }
 
@@ -104,8 +103,8 @@ function domClick(
   const terms = toTerms(raw)
   const nodes = Array.from(
     document.querySelectorAll<HTMLElement>(
-      'a, button, [role="button"], input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], label, summary, [onclick], [data-testid], [aria-label]',
-    ),
+      'a, button, [role="button"], input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], label, summary, [onclick], [data-testid], [aria-label]'
+    )
   )
 
   const ranked: Ranked[] = nodes
@@ -152,7 +151,11 @@ function domClick(
       }
 
       const rect = el.getBoundingClientRect()
-      const inViewport = rect.bottom >= 0 && rect.right >= 0 && rect.top <= window.innerHeight && rect.left <= window.innerWidth
+      const inViewport =
+        rect.bottom >= 0 &&
+        rect.right >= 0 &&
+        rect.top <= window.innerHeight &&
+        rect.left <= window.innerWidth
       if (inViewport) score += 12
 
       return { el, score, selector: buildSelector(el), reasons, directMatch }
@@ -183,7 +186,7 @@ function domClick(
 
 function domFill(
   selector: string,
-  value: string,
+  value: string
 ): {
   success: boolean
   error?: string
@@ -252,14 +255,15 @@ function domFill(
   if (!raw) return { success: false, error: 'Empty selector' }
 
   const terms = toTerms(raw)
-  const allInputs = Array.from(document.querySelectorAll<InputLike>('input, textarea'))
-    .filter((el) => {
+  const allInputs = Array.from(document.querySelectorAll<InputLike>('input, textarea')).filter(
+    (el) => {
       if (el instanceof HTMLInputElement) {
         const disallowed = ['hidden', 'submit', 'button', 'radio', 'checkbox', 'file', 'image']
         return !disallowed.includes(el.type)
       }
       return true
-    })
+    }
+  )
 
   const ranked: Ranked[] = allInputs
     .map((el) => {
@@ -281,7 +285,7 @@ function domFill(
           el.getAttribute('placeholder') ?? '',
           el.getAttribute('aria-label') ?? '',
           readLabelText(el),
-        ].join(' '),
+        ].join(' ')
       )
       if (terms.length > 0) {
         const matches = terms.filter((term) => haystack.includes(term)).length
@@ -364,7 +368,9 @@ interface RunActionResult {
   debug?: ActionSelectionDebug
 }
 
-function buildActionQuery(action: Extract<TabAction, { type: 'clickElement' | 'fillForm' }>): string {
+function buildActionQuery(
+  action: Extract<TabAction, { type: 'clickElement' | 'fillForm' }>
+): string {
   const parts = [action.selector]
   if (action.descriptor?.label) parts.push(action.descriptor.label)
   if (action.descriptor?.intent) parts.push(action.descriptor.intent)
@@ -391,7 +397,7 @@ async function executeDomActionWithRetries<T extends unknown[]>(
   actionType: 'clickElement' | 'fillForm',
   func: (...args: T) => DomActionResult,
   args: T,
-  maxAttempts = SELECTION_POLICY.maxAttempts,
+  maxAttempts = SELECTION_POLICY.maxAttempts
 ): Promise<DomActionResult> {
   let last: DomActionResult = { success: false, error: 'Unknown DOM failure' }
   const attempts: NonNullable<DomActionResult['attempts']> = []
@@ -445,24 +451,14 @@ async function executeWithPolicy<T extends unknown[]>(
   actionType: 'clickElement' | 'fillForm',
   func: (...args: T) => DomActionResult,
   semanticArgs: T,
-  selectorArgs: T,
+  selectorArgs: T
 ): Promise<{ result: DomActionResult; mode: ActionSelectionDebug['mode']; fallbackUsed: boolean }> {
   if (SELECTION_POLICY.mode === 'selector') {
-    const selectorResult = await executeDomActionWithRetries(
-      tabId,
-      actionType,
-      func,
-      selectorArgs,
-    )
+    const selectorResult = await executeDomActionWithRetries(tabId, actionType, func, selectorArgs)
     return { result: selectorResult, mode: 'selector', fallbackUsed: false }
   }
 
-  const semanticResult = await executeDomActionWithRetries(
-    tabId,
-    actionType,
-    func,
-    semanticArgs,
-  )
+  const semanticResult = await executeDomActionWithRetries(tabId, actionType, func, semanticArgs)
 
   if (isConfidentSelection(semanticResult)) {
     return { result: semanticResult, mode: 'hybrid', fallbackUsed: false }
@@ -475,12 +471,7 @@ async function executeWithPolicy<T extends unknown[]>(
     success: semanticResult.success,
   })
 
-  const selectorResult = await executeDomActionWithRetries(
-    tabId,
-    actionType,
-    func,
-    selectorArgs,
-  )
+  const selectorResult = await executeDomActionWithRetries(tabId, actionType, func, selectorArgs)
 
   const attempts = [
     ...(semanticResult.attempts ?? []),
@@ -502,9 +493,7 @@ async function executeWithPolicy<T extends unknown[]>(
 
 // ── Executor ──────────────────────────────────────────────────────────────────
 
-type ProgressCallback = (
-  progress: Omit<ActionProgressMessage, 'type'>,
-) => void
+type ProgressCallback = (progress: Omit<ActionProgressMessage, 'type'>) => void
 
 export interface ExecuteActionsResult {
   pageContents: string[]
@@ -513,7 +502,7 @@ export interface ExecuteActionsResult {
 export async function executeActions(
   actions: TabAction[],
   onProgress: ProgressCallback,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<ExecuteActionsResult> {
   log('executeActions start', { actionCount: actions.length })
   // Track which tabs got an overlay so we can clean up on any exit path.
@@ -523,53 +512,56 @@ export async function executeActions(
   const pageContents: string[] = []
 
   try {
-  for (let i = 0; i < actions.length; i++) {
-    if (signal?.aborted) throw new Error('Task cancelled')
+    for (let i = 0; i < actions.length; i++) {
+      if (signal?.aborted) throw new Error('Task cancelled')
 
-    let action = actions[i]
-    log('Action begin', { index: i, type: action.type, action })
+      let action = actions[i]
+      log('Action begin', { index: i, type: action.type, action })
 
-    // Remap tabId to the most recently opened tab when the referenced tab
-    // is not scriptable (e.g. AI used the old active-tab ID after openTab).
-    if ('tabId' in action && lastOpenedTabId != null) {
-      const needsRemap = await shouldRemapTabId((action as { tabId: number }).tabId, lastOpenedTabId)
-      if (needsRemap) {
-        log('Remapping tabId', {
-          index: i,
-          from: (action as { tabId: number }).tabId,
-          to: lastOpenedTabId,
+      // Remap tabId to the most recently opened tab when the referenced tab
+      // is not scriptable (e.g. AI used the old active-tab ID after openTab).
+      if ('tabId' in action && lastOpenedTabId != null) {
+        const needsRemap = await shouldRemapTabId(
+          (action as { tabId: number }).tabId,
+          lastOpenedTabId
+        )
+        if (needsRemap) {
+          log('Remapping tabId', {
+            index: i,
+            from: (action as { tabId: number }).tabId,
+            to: lastOpenedTabId,
+          })
+          action = { ...action, tabId: lastOpenedTabId } as TabAction
+        }
+      }
+
+      onProgress({ index: i, total: actions.length, action, status: 'running' })
+
+      try {
+        const result = await runAction(action, signal, overlaidTabs, (tabId) => {
+          lastOpenedTabId = tabId
         })
-        action = { ...action, tabId: lastOpenedTabId } as TabAction
+        const pageContent = result.pageContent
+        if (typeof pageContent === 'string' && pageContent.trim()) {
+          pageContents.push(pageContent)
+        }
+        onProgress({ index: i, total: actions.length, action, status: 'done', debug: result.debug })
+        log('Action done', { index: i, type: action.type })
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err)
+        const debug = (err as { debug?: ActionSelectionDebug })?.debug
+        onProgress({
+          index: i,
+          total: actions.length,
+          action,
+          status: 'error',
+          error,
+          debug,
+        })
+        warn('Action failed', { index: i, type: action.type, error })
+        throw err
       }
     }
-
-    onProgress({ index: i, total: actions.length, action, status: 'running' })
-
-    try {
-      const result = await runAction(action, signal, overlaidTabs, (tabId) => {
-        lastOpenedTabId = tabId
-      })
-      const pageContent = result.pageContent
-      if (typeof pageContent === 'string' && pageContent.trim()) {
-        pageContents.push(pageContent)
-      }
-      onProgress({ index: i, total: actions.length, action, status: 'done', debug: result.debug })
-      log('Action done', { index: i, type: action.type })
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err)
-      const debug = (err as { debug?: ActionSelectionDebug })?.debug
-      onProgress({
-        index: i,
-        total: actions.length,
-        action,
-        status: 'error',
-        error,
-        debug,
-      })
-      warn('Action failed', { index: i, type: action.type, error })
-      throw err
-    }
-  }
   } finally {
     // Always remove overlays regardless of success / error / cancel.
     log('Cleaning overlays', { count: overlaidTabs.size })
@@ -584,7 +576,7 @@ async function runAction(
   action: TabAction,
   signal?: AbortSignal,
   overlaidTabs?: Set<number>,
-  onOpenedTab?: (tabId: number) => void,
+  onOpenedTab?: (tabId: number) => void
 ): Promise<RunActionResult> {
   switch (action.type) {
     case 'openTab': {
@@ -613,14 +605,15 @@ async function runAction(
 
     case 'clickElement': {
       await waitForTabLoad(action.tabId, signal)
-      await injectOverlay(action.tabId); overlaidTabs?.add(action.tabId)
+      await injectOverlay(action.tabId)
+      overlaidTabs?.add(action.tabId)
       const query = buildActionQuery(action)
       const execution = await executeWithPolicy(
         action.tabId,
         'clickElement',
         domClick,
         [query],
-        [action.selector],
+        [action.selector]
       )
       const r = execution.result
       const debug = toSelectionDebug(query, r)
@@ -636,14 +629,15 @@ async function runAction(
 
     case 'fillForm': {
       await waitForTabLoad(action.tabId, signal)
-      await injectOverlay(action.tabId); overlaidTabs?.add(action.tabId)
+      await injectOverlay(action.tabId)
+      overlaidTabs?.add(action.tabId)
       const query = buildActionQuery(action)
       const execution = await executeWithPolicy(
         action.tabId,
         'fillForm',
         domFill,
         [query, action.value],
-        [action.selector, action.value],
+        [action.selector, action.value]
       )
       const r = execution.result
       const debug = toSelectionDebug(query, r)
@@ -659,7 +653,8 @@ async function runAction(
 
     case 'getPageContent': {
       await waitForTabLoad(action.tabId, signal)
-      await injectOverlay(action.tabId); overlaidTabs?.add(action.tabId)
+      await injectOverlay(action.tabId)
+      overlaidTabs?.add(action.tabId)
       const result = await chrome.scripting.executeScript<[], string>({
         target: { tabId: action.tabId },
         func: domGetContent,
@@ -679,9 +674,7 @@ async function runAction(
 
     case 'waitMs':
       // Cap at 10 s to prevent runaway waits.
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, Math.min(action.ms, 10_000)),
-      )
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(action.ms, 10_000)))
       return { pageContent: null }
 
     default:
@@ -716,50 +709,58 @@ function waitForTabLoad(tabId: number, signal?: AbortSignal): Promise<void> {
     const TIMEOUT_MS = 15_000
     log('Waiting for tab load', { tabId })
 
-    chrome.tabs.get(tabId).then((tab) => {
-      if (isScriptable(tab)) { resolve(); return }
+    chrome.tabs
+      .get(tabId)
+      .then((tab) => {
+        if (isScriptable(tab)) {
+          resolve()
+          return
+        }
 
-      // Tab is fully loaded but on a non-scriptable URL — fail fast.
-      if (tab.status === 'complete') {
-        reject(new Error(
-          `Tab ${tabId} is loaded but cannot be scripted (URL: ${tab.url ?? 'unknown'}). ` +
-          `If you just opened a new tab, the AI may have used the wrong tab ID.`
-        ))
-        return
-      }
+        // Tab is fully loaded but on a non-scriptable URL — fail fast.
+        if (tab.status === 'complete') {
+          reject(
+            new Error(
+              `Tab ${tabId} is loaded but cannot be scripted (URL: ${tab.url ?? 'unknown'}). ` +
+                `If you just opened a new tab, the AI may have used the wrong tab ID.`
+            )
+          )
+          return
+        }
 
-      const timer = setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener)
-        warn('Tab load timeout', { tabId, timeoutMs: TIMEOUT_MS })
-        reject(new Error(`Timed out waiting for tab ${tabId} to load`))
-      }, TIMEOUT_MS)
+        const timer = setTimeout(() => {
+          chrome.tabs.onUpdated.removeListener(listener)
+          warn('Tab load timeout', { tabId, timeoutMs: TIMEOUT_MS })
+          reject(new Error(`Timed out waiting for tab ${tabId} to load`))
+        }, TIMEOUT_MS)
 
-      function listener(
-        updatedId: number,
-        _info: chrome.tabs.OnUpdatedInfo,
-        updatedTab: chrome.tabs.Tab,
-      ) {
-        if (updatedId !== tabId) return
-        if (isScriptable(updatedTab)) {
+        function listener(
+          updatedId: number,
+          _info: chrome.tabs.OnUpdatedInfo,
+          updatedTab: chrome.tabs.Tab
+        ) {
+          if (updatedId !== tabId) return
+          if (isScriptable(updatedTab)) {
+            clearTimeout(timer)
+            chrome.tabs.onUpdated.removeListener(listener)
+            resolve()
+          }
+        }
+
+        if (signal?.aborted) {
+          clearTimeout(timer)
+          reject(new Error('Task cancelled'))
+          return
+        }
+        signal?.addEventListener('abort', () => {
           clearTimeout(timer)
           chrome.tabs.onUpdated.removeListener(listener)
-          resolve()
-        }
-      }
+          reject(new Error('Task cancelled'))
+        })
 
-      if (signal?.aborted) {
-        clearTimeout(timer)
-        reject(new Error('Task cancelled'))
-        return
-      }
-      signal?.addEventListener('abort', () => {
-        clearTimeout(timer)
-        chrome.tabs.onUpdated.removeListener(listener)
-        reject(new Error('Task cancelled'))
+        chrome.tabs.onUpdated.addListener(listener)
       })
-
-      chrome.tabs.onUpdated.addListener(listener)
-    }).catch(reject)
+      .catch(reject)
   })
 }
 

@@ -13,7 +13,7 @@ export function MemoryView({ memories, onAdd, onDelete, onTouch }: Props) {
 
   const sortedMemories = useMemo(
     () => [...memories].sort((a, b) => b.createdAt - a.createdAt),
-    [memories],
+    [memories]
   )
 
   const handleAdd = () => {

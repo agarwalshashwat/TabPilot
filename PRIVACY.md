@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Tab AI Pilot processes your prompts to generate browser actions.
+TabPilot processes your prompts to generate browser actions.
 
 ## Data Processed
 

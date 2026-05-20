@@ -11,7 +11,14 @@ interface Props {
   isThinking?: boolean
 }
 
-export function MessageList({ messages, lastUserPrompt, taskStatus, onRetry, onRephrase, isThinking }: Props) {
+export function MessageList({
+  messages,
+  lastUserPrompt,
+  taskStatus,
+  onRetry,
+  onRephrase,
+  isThinking,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -21,7 +28,7 @@ export function MessageList({ messages, lastUserPrompt, taskStatus, onRetry, onR
   if (messages.length === 0) {
     return (
       <div className="message-list-empty">
-        <strong>Tab AI Pilot</strong>
+        <strong>TabPilot</strong>
         <br />
         Describe what you want to do with your tabs.
         <br />
@@ -41,7 +48,10 @@ export function MessageList({ messages, lastUserPrompt, taskStatus, onRetry, onR
         </div>
       ))}
       {taskStatus !== 'running' && !isThinking && lastUserPrompt.trim() && (
-        <div className="retry-wrap" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+        <div
+          className="retry-wrap"
+          style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}
+        >
           <button className="retry-btn" onClick={onRetry}>
             ↩ Retry
           </button>

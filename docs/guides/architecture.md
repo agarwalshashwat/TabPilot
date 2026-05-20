@@ -1,8 +1,8 @@
-# Tab AI Pilot — Basic Architecture
+# TabPilot — Basic Architecture
 
 ## Overview
 
-Tab AI Pilot is a Chrome extension that converts natural-language user prompts into tab and page actions. It is composed of:
+TabPilot is a Chrome extension that converts natural-language user prompts into tab and page actions. It is composed of:
 
 - A **React sidepanel UI** for chat, routine management, and settings.
 - A **background service worker** that orchestrates AI planning and action execution.
@@ -107,5 +107,5 @@ Responsibilities:
 ## Extension Lifecycle Notes
 
 - Toolbar icon opens sidepanel by configuration in worker startup.
-- Sidepanel establishes a runtime port (`tab-ai-pilot`) and initializes with `CHECK_AI`.
+- Sidepanel establishes a runtime port (`tabpilot`) and initializes with `CHECK_AI`.
 - Worker responds with current availability and initial routines to hydrate UI state.

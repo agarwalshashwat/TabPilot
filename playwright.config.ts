@@ -15,12 +15,9 @@ export default defineConfig({
     // Run `npm run build` before running tests.
     ...devices['Desktop Chrome'],
     channel: 'chromium',
-    headless: false,  // Extensions require a headed browser
+    headless: false, // Extensions require a headed browser
     launchOptions: {
-      args: [
-        `--disable-extensions-except=${extensionPath}`,
-        `--load-extension=${extensionPath}`,
-      ],
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     },
   },
 })

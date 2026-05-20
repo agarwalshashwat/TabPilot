@@ -1,12 +1,19 @@
-import type {
-  WorkerInboundMessage,
-  WorkerOutboundMessage,
-  TabInfo,
-  Routine,
-} from '../shared/types'
-import { checkAvailability, checkChromeAIAvailability, promptToActions, destroySession, rephraseUserPrompt } from './ai'
+import type { WorkerInboundMessage, WorkerOutboundMessage, TabInfo, Routine } from '../shared/types'
+import {
+  checkAvailability,
+  checkChromeAIAvailability,
+  promptToActions,
+  destroySession,
+  rephraseUserPrompt,
+} from './ai'
 import { executeActions } from './executor'
-import { loadRoutines, saveRoutine, deleteRoutine, resolveActions, snapshotActions } from './routines'
+import {
+  loadRoutines,
+  saveRoutine,
+  deleteRoutine,
+  resolveActions,
+  snapshotActions,
+} from './routines'
 import { removeAllOverlays } from './overlay'
 
 const DEBUG_LOGS = false
@@ -25,18 +32,16 @@ const STREAM_CHUNK_THROTTLE_MS = 150
 const STREAM_CHUNK_MIN_DELTA_CHARS = 120
 
 // ── Open the side panel when the extension toolbar icon is clicked ────────────
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((err) => {
-    error('Failed to set side panel behavior', err)
-  })
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+  error('Failed to set side panel behavior', err)
+})
 
 // ── Per-connection task state ─────────────────────────────────────────────────
 let currentAbortController: AbortController | null = null
 
 // ── Port-based communication with the side panel ──────────────────────────────
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== 'tab-ai-pilot') return
+  if (port.name !== 'tabpilot') return
 
   log('Port connected', { name: port.name, sender: port.sender?.url })
 
@@ -127,7 +132,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 lastPostedStreamAt = now
                 lastPostedStreamTextLength = text.length
               },
-              signal,
+              signal
             )
 
             if (latestStreamText.length > lastPostedStreamTextLength) {
@@ -169,7 +174,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 }
                 safePost(progressMsg)
               },
-              signal,
+              signal
             )
 
             log('Action execution complete', { pageContents: result.pageContents.length })
@@ -220,9 +225,15 @@ chrome.runtime.onConnect.addListener((port) => {
               return msg.prompt
             })
             log('REPHRASE_PROMPT complete', { rephrased })
-            safePost({ type: 'REPHRASED_PROMPT', prompt: rephrased } satisfies WorkerOutboundMessage)
+            safePost({
+              type: 'REPHRASED_PROMPT',
+              prompt: rephrased,
+            } satisfies WorkerOutboundMessage)
           } catch {
-            safePost({ type: 'REPHRASED_PROMPT', prompt: msg.prompt } satisfies WorkerOutboundMessage)
+            safePost({
+              type: 'REPHRASED_PROMPT',
+              prompt: msg.prompt,
+            } satisfies WorkerOutboundMessage)
           }
           break
         }
@@ -290,7 +301,7 @@ chrome.runtime.onConnect.addListener((port) => {
                   ...progress,
                 } satisfies WorkerOutboundMessage)
               },
-              signal,
+              signal
             )
 
             if (result.pageContents.length > 0) {
@@ -349,7 +360,7 @@ chrome.runtime.onConnect.addListener((port) => {
             log('TRIGGER_DOWNLOAD complete')
           } catch {
             const availability = await checkChromeAIAvailability().catch(
-              () => 'unavailable' as const,
+              () => 'unavailable' as const
             )
             safePost({
               type: 'AI_AVAILABILITY',
@@ -394,8 +405,14 @@ function buildPageContentSummary(pageContents: string[]): string {
   const items = pageContents
     .map((content) => {
       const lines = content.split('\n')
-      const title = lines.find((l) => l.startsWith('Title:'))?.replace('Title:', '').trim()
-      const url = lines.find((l) => l.startsWith('URL:'))?.replace('URL:', '').trim()
+      const title = lines
+        .find((l) => l.startsWith('Title:'))
+        ?.replace('Title:', '')
+        .trim()
+      const url = lines
+        .find((l) => l.startsWith('URL:'))
+        ?.replace('URL:', '')
+        .trim()
       const body = (content.split('\n\n')[1] ?? '').replace(/\s+/g, ' ').trim()
       const snippet = body.slice(0, 260)
       const suffix = body.length > snippet.length ? '...' : ''

@@ -184,7 +184,10 @@ function deriveSearchQuery(prompt: string): string {
 
   const normalizeIntentFragment = (value: string): string =>
     stripWrapper(value)
-      .replace(/^(open\s+(a\s+)?new\s+tab(\s+with)?|go\s+to|navigate\s+to|search(\s+for)?|find)\s+/i, '')
+      .replace(
+        /^(open\s+(a\s+)?new\s+tab(\s+with)?|go\s+to|navigate\s+to|search(\s+for)?|find)\s+/i,
+        ''
+      )
       .replace(/^(click\s+on\s+|click\s+)/i, '')
       .replace(/\b(first|second|third)\b\s+video\b/i, '')
       .replace(/\s+/g, ' ')
@@ -195,15 +198,11 @@ function deriveSearchQuery(prompt: string): string {
     .map(normalizeIntentFragment)
     .filter(Boolean)
 
-  const stopPhrases = [
-    /^open\s+(a\s+)?new\s+tab/i,
-    /^click\b/i,
-    /^with\s+youtube$/i,
-    /^youtube$/i,
-  ]
+  const stopPhrases = [/^open\s+(a\s+)?new\s+tab/i, /^click\b/i, /^with\s+youtube$/i, /^youtube$/i]
 
-  const candidates = (chainedParts.length > 0 ? chainedParts : [normalizeIntentFragment(text)])
-    .filter((part) => !stopPhrases.some((re) => re.test(part)))
+  const candidates = (
+    chainedParts.length > 0 ? chainedParts : [normalizeIntentFragment(text)]
+  ).filter((part) => !stopPhrases.some((re) => re.test(part)))
 
   if (candidates.length === 0) return text
   return candidates.sort((a, b) => b.length - a.length)[0]
@@ -260,11 +259,12 @@ function readDescriptor(value: unknown): ElementDescriptor | undefined {
 function normalizeAndValidateResponse(
   raw: { explanation?: unknown; actions?: unknown[] },
   userPrompt: string,
-  activeTabId: number | null,
+  activeTabId: number | null
 ): AIResponse {
-  const explanation = typeof raw.explanation === 'string' && raw.explanation.trim()
-    ? raw.explanation.trim()
-    : 'Executing your request.'
+  const explanation =
+    typeof raw.explanation === 'string' && raw.explanation.trim()
+      ? raw.explanation.trim()
+      : 'Executing your request.'
 
   if (!Array.isArray(raw.actions)) {
     return { explanation, actions: [] }
@@ -279,9 +279,10 @@ function normalizeAndValidateResponse(
 
     switch (type) {
       case 'openTab': {
-        const rawUrl = typeof action.url === 'string' && action.url.trim()
-          ? action.url.trim()
-          : buildSearchUrl(userPrompt)
+        const rawUrl =
+          typeof action.url === 'string' && action.url.trim()
+            ? action.url.trim()
+            : buildSearchUrl(userPrompt)
         const url = shouldCoerceYouTubeWatchToSearch(rawUrl, userPrompt)
           ? buildSearchUrl(userPrompt)
           : rawUrl
@@ -293,9 +294,10 @@ function normalizeAndValidateResponse(
         if (tabId == null) {
           throw new Error(`navigateTo action missing tabId at index ${index}`)
         }
-        const rawUrl = typeof action.url === 'string' && action.url.trim()
-          ? action.url.trim()
-          : buildSearchUrl(userPrompt)
+        const rawUrl =
+          typeof action.url === 'string' && action.url.trim()
+            ? action.url.trim()
+            : buildSearchUrl(userPrompt)
         const url = shouldCoerceYouTubeWatchToSearch(rawUrl, userPrompt)
           ? buildSearchUrl(userPrompt)
           : rawUrl
@@ -340,9 +342,8 @@ function normalizeAndValidateResponse(
         if (tabIds.length === 0) {
           throw new Error(`groupTabs action missing tabIds at index ${index}`)
         }
-        const title = typeof action.title === 'string' && action.title.trim()
-          ? action.title.trim()
-          : undefined
+        const title =
+          typeof action.title === 'string' && action.title.trim() ? action.title.trim() : undefined
         return { type, tabIds, title }
       }
 
@@ -400,7 +401,7 @@ export function destroySession(): void {
 async function* streamChrome(
   context: string,
   history: HistoryMessage[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const s = await getOrCreateSession(signal)
   let formattedContext = context
@@ -436,20 +437,23 @@ async function* streamOpenAI(
   context: string,
   settings: AISettings,
   history: HistoryMessage[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   log('OpenAI request start', { model: settings.openaiModel, historyCount: history.length })
   const endpoint = 'https://api.openai.com/v1/chat/completions'
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${settings.openaiKey}`,
+    Authorization: `Bearer ${settings.openaiKey}`,
   }
   const basePayload = {
     model: settings.openaiModel,
     stream: true,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...history.map((msg) => ({ role: msg.role === 'assistant' ? 'assistant' as const : 'user' as const, content: msg.content })),
+      ...history.map((msg) => ({
+        role: msg.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+        content: msg.content,
+      })),
       { role: 'user', content: context },
     ],
   }
@@ -508,7 +512,7 @@ async function* streamAnthropic(
   context: string,
   settings: AISettings,
   history: HistoryMessage[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -524,7 +528,10 @@ async function* streamAnthropic(
       stream: true,
       system: SYSTEM_PROMPT,
       messages: [
-        ...history.map((msg) => ({ role: msg.role === 'assistant' ? 'assistant' as const : 'user' as const, content: msg.content })),
+        ...history.map((msg) => ({
+          role: msg.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+          content: msg.content,
+        })),
         { role: 'user', content: context },
       ],
     }),
@@ -549,7 +556,7 @@ async function* streamGemini(
   context: string,
   settings: AISettings,
   history: HistoryMessage[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/` +
@@ -589,7 +596,7 @@ async function* streamGemini(
 // and yields the full accumulated text after each non-null token.
 async function* parseSseStream(
   response: Response,
-  extractor: (data: string) => string | null,
+  extractor: (data: string) => string | null
 ): AsyncGenerator<string> {
   if (!response.body) throw new Error('Response body is null')
   const reader = response.body.getReader()
@@ -627,7 +634,7 @@ export async function promptToActions(
   activeTabId: number | null,
   history: HistoryMessage[],
   onChunk: (text: string) => void,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<AIResponse> {
   const settings = await getSettings()
   const storedMemories = await loadAgentMemories()
@@ -651,9 +658,7 @@ export async function promptToActions(
 
   const context = [
     'Agent memory (persistent user preferences/facts):',
-    memories.length > 0
-      ? memories.map((m, i) => `  ${i + 1}. ${m.text}`).join('\n')
-      : '  (none)',
+    memories.length > 0 ? memories.map((m, i) => `  ${i + 1}. ${m.text}`).join('\n') : '  (none)',
     '',
     `Open tabs (${tabs.length}):`,
     tabList || '  (none)',
@@ -698,7 +703,7 @@ export async function promptToActions(
   const normalized = normalizeAndValidateResponse(
     parsed as unknown as { explanation?: unknown; actions?: unknown[] },
     userPrompt,
-    activeTabId,
+    activeTabId
   )
   log('promptToActions normalized response', {
     explanation: normalized.explanation,
@@ -709,7 +714,7 @@ export async function promptToActions(
 
 export async function rephraseUserPrompt(
   userPrompt: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<string> {
   const settings = await getSettings()
   log('rephraseUserPrompt start', { provider: settings.provider, prompt: userPrompt })
@@ -729,7 +734,7 @@ Make sure to:
       signal,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.openaiKey}`,
+        Authorization: `Bearer ${settings.openaiKey}`,
       },
       body: JSON.stringify({
         model: settings.openaiModel,

@@ -37,7 +37,9 @@ export function SaveRoutineModal({ defaultName, onSave, onDismiss }: Props) {
           }}
         />
         <div className="modal-buttons">
-          <button className="btn-ghost" onClick={onDismiss}>Dismiss</button>
+          <button className="btn-ghost" onClick={onDismiss}>
+            Dismiss
+          </button>
           <button className="btn-primary" onClick={handleSave} disabled={!name.trim()}>
             Save
           </button>

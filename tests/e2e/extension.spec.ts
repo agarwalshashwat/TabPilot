@@ -20,7 +20,7 @@ async function resetExtensionStorage(page: import('@playwright/test').Page) {
 
 async function launchSidepanel() {
   const baseTmpDir = process.env.TMPDIR || tmpdir()
-  const profileDir = mkdtempSync(join(baseTmpDir, 'tab-ai-pilot-pw-'))
+  const profileDir = mkdtempSync(join(baseTmpDir, 'tabpilot-pw-'))
 
   const context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
@@ -56,7 +56,10 @@ async function launchSidepanel() {
   return { context, serviceWorker, extensionId, page }
 }
 
-async function readSyncStorage<T>(page: import('@playwright/test').Page, key: string): Promise<T | undefined> {
+async function readSyncStorage<T>(
+  page: import('@playwright/test').Page,
+  key: string
+): Promise<T | undefined> {
   return page.evaluate(async (storageKey) => {
     const c = (globalThis as { chrome: typeof chrome }).chrome
     const result = await new Promise<Record<string, unknown>>((resolve) => {
@@ -66,7 +69,10 @@ async function readSyncStorage<T>(page: import('@playwright/test').Page, key: st
   }, key)
 }
 
-async function readLocalStorage<T>(page: import('@playwright/test').Page, key: string): Promise<T | undefined> {
+async function readLocalStorage<T>(
+  page: import('@playwright/test').Page,
+  key: string
+): Promise<T | undefined> {
   return page.evaluate(async (storageKey) => {
     const c = (globalThis as { chrome: typeof chrome }).chrome
     const result = await new Promise<Record<string, unknown>>((resolve) => {
@@ -77,7 +83,7 @@ async function readLocalStorage<T>(page: import('@playwright/test').Page, key: s
 }
 
 // Extension tests require a persistent context so the extension loads properly.
-test.describe('Tab AI Pilot extension', () => {
+test.describe('TabPilot extension', () => {
   test('extension service worker registers and side panel loads', async () => {
     const { context, serviceWorker, page } = await launchSidepanel()
 
@@ -169,7 +175,7 @@ test.describe('Tab AI Pilot extension', () => {
               },
             },
           },
-          () => resolve(),
+          () => resolve()
         )
       })
     })
@@ -180,7 +186,9 @@ test.describe('Tab AI Pilot extension', () => {
 
     await page.getByRole('button', { name: 'Recent Chats' }).click()
     await expect(page.locator('.recent-chat-card')).toHaveCount(2)
-    await expect(page.locator('.recent-chat-card').first()).toContainText('Open docs and summarize release notes')
+    await expect(page.locator('.recent-chat-card').first()).toContainText(
+      'Open docs and summarize release notes'
+    )
 
     await page.getByRole('button', { name: /Plan quarterly review agenda/ }).click()
     await expect(page.locator('.chat-area')).toBeVisible()
@@ -188,14 +196,19 @@ test.describe('Tab AI Pilot extension', () => {
 
     await expect
       .poll(async () => {
-        const latest = await readLocalStorage<{ activeChatId?: string }>(page, 'chat_threads_state_v1')
+        const latest = await readLocalStorage<{ activeChatId?: string }>(
+          page,
+          'chat_threads_state_v1'
+        )
         return latest?.activeChatId
       })
       .toBe('chat-a')
 
     await page.reload()
     await page.getByRole('button', { name: 'Recent Chats' }).click()
-    await expect(page.locator('.recent-chat-card.active')).toContainText('Plan quarterly review agenda')
+    await expect(page.locator('.recent-chat-card.active')).toContainText(
+      'Plan quarterly review agenda'
+    )
 
     const stored = await readLocalStorage<{ activeChatId?: string }>(page, 'chat_threads_state_v1')
     expect(stored?.activeChatId).toBe('chat-a')
@@ -257,7 +270,9 @@ test.describe('Tab AI Pilot extension', () => {
       .fill('Always open Gmail and Calendar first in the morning')
     await page.getByRole('button', { name: 'Save memory' }).click()
 
-    await expect(page.getByText('Always open Gmail and Calendar first in the morning')).toBeVisible()
+    await expect(
+      page.getByText('Always open Gmail and Calendar first in the morning')
+    ).toBeVisible()
 
     await expect
       .poll(async () => {
@@ -268,7 +283,9 @@ test.describe('Tab AI Pilot extension', () => {
 
     await page.reload()
     await page.getByRole('button', { name: 'Memory' }).click()
-    await expect(page.getByText('Always open Gmail and Calendar first in the morning')).toBeVisible()
+    await expect(
+      page.getByText('Always open Gmail and Calendar first in the morning')
+    ).toBeVisible()
 
     await page.locator('.memory-card .btn-delete').first().click()
     await expect(page.getByText('No memories')).toBeVisible()
@@ -290,21 +307,27 @@ test.describe('Tab AI Pilot extension', () => {
     await page.evaluate(async () => {
       const c = (globalThis as { chrome: typeof chrome }).chrome
       await new Promise<void>((resolve) => {
-        c.storage.local.set({
-          ai_settings: {
-            provider: 'openai',
-            openaiKey: 'sk-test-key-123',
-            openaiModel: 'gpt-4o'
-          }
-        }, () => resolve())
+        c.storage.local.set(
+          {
+            ai_settings: {
+              provider: 'openai',
+              openaiKey: 'sk-test-key-123',
+              openaiModel: 'gpt-4o',
+            },
+          },
+          () => resolve()
+        )
       })
       await new Promise<void>((resolve) => {
-        c.storage.local.set({
-          chat_history: [
-            { id: '1', role: 'user', content: 'vague prompt' },
-            { id: '2', role: 'assistant', content: 'planned actions explanation' }
-          ]
-        }, () => resolve())
+        c.storage.local.set(
+          {
+            chat_history: [
+              { id: '1', role: 'user', content: 'vague prompt' },
+              { id: '2', role: 'assistant', content: 'planned actions explanation' },
+            ],
+          },
+          () => resolve()
+        )
       })
     })
 

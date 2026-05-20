@@ -89,9 +89,7 @@ export async function resolveActions(savedActions: SavedAction[]): Promise<TabAc
         }
 
         if (liveTabId == null) {
-          throw new Error(
-            `Routine requires a tab open at "${savedTabUrl}" but none was found.`,
-          )
+          throw new Error(`Routine requires a tab open at "${savedTabUrl}" but none was found.`)
         }
 
         resolved.push({ ...action, tabId: liveTabId } as TabAction)

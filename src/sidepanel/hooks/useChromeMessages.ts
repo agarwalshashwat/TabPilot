@@ -52,7 +52,7 @@ export function useChromeMessages(dispatch: DispatchFn): {
   const portRef = useRef<chrome.runtime.Port | null>(null)
 
   useEffect(() => {
-    const port = chrome.runtime.connect({ name: 'tab-ai-pilot' })
+    const port = chrome.runtime.connect({ name: 'tabpilot' })
     portRef.current = port
     log('Port connected')
 
@@ -114,7 +114,11 @@ export function useChromeMessages(dispatch: DispatchFn): {
           dispatch({ type: 'SET_ROUTINES', routines: msg.routines })
           break
         case 'TASK_SNAPSHOT':
-          dispatch({ type: 'SET_TASK_SNAPSHOT', explanation: msg.explanation, actions: msg.actions })
+          dispatch({
+            type: 'SET_TASK_SNAPSHOT',
+            explanation: msg.explanation,
+            actions: msg.actions,
+          })
           break
         case 'REPHRASED_PROMPT':
           dispatch({ type: 'SET_REPHRASED_PROMPT', prompt: msg.prompt })
@@ -173,5 +177,14 @@ export function useChromeMessages(dispatch: DispatchFn): {
     portRef.current?.postMessage({ type: 'REPHRASE_PROMPT', prompt })
   }, [])
 
-  return { sendPrompt, cancelTask, triggerDownload, saveRoutine, deleteRoutine, runRoutine, notifySettingsChanged, rephrasePrompt }
+  return {
+    sendPrompt,
+    cancelTask,
+    triggerDownload,
+    saveRoutine,
+    deleteRoutine,
+    runRoutine,
+    notifySettingsChanged,
+    rephrasePrompt,
+  }
 }

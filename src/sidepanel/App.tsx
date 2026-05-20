@@ -105,7 +105,7 @@ function normalizeMessages(raw: unknown): ChatMessage[] {
         typeof msg === 'object' &&
         typeof (msg as ChatMessage).id === 'string' &&
         ((msg as ChatMessage).role === 'user' || (msg as ChatMessage).role === 'assistant') &&
-        typeof (msg as ChatMessage).content === 'string',
+        typeof (msg as ChatMessage).content === 'string'
     )
     .slice(-MAX_CHAT_HISTORY_MESSAGES)
 }
@@ -120,7 +120,9 @@ function applyChatCapacity(store: ChatStoreState): ChatStoreState {
   const ids = Object.keys(store.threads)
   if (ids.length <= MAX_RECENT_CHATS) return store
 
-  const sorted = [...ids].sort((a, b) => (store.updatedAtById[b] ?? 0) - (store.updatedAtById[a] ?? 0))
+  const sorted = [...ids].sort(
+    (a, b) => (store.updatedAtById[b] ?? 0) - (store.updatedAtById[a] ?? 0)
+  )
   const keep = new Set(sorted.slice(0, MAX_RECENT_CHATS))
   if (store.activeChatId) keep.add(store.activeChatId)
 
@@ -133,7 +135,10 @@ function applyChatCapacity(store: ChatStoreState): ChatStoreState {
     }
   }
 
-  const activeChatId = store.activeChatId && nextThreads[store.activeChatId] ? store.activeChatId : Object.keys(nextThreads)[0] ?? null
+  const activeChatId =
+    store.activeChatId && nextThreads[store.activeChatId]
+      ? store.activeChatId
+      : (Object.keys(nextThreads)[0] ?? null)
 
   return { activeChatId, threads: nextThreads, updatedAtById: nextUpdatedAtById }
 }
@@ -152,7 +157,10 @@ function normalizeStoredChatThreadsState(raw: unknown): ChatStoreState | null {
   if (Object.keys(threads).length === 0) return null
 
   const updatedAtById: Record<string, number> = {}
-  const rawUpdated = value.updatedAtById && typeof value.updatedAtById === 'object' ? (value.updatedAtById as Record<string, unknown>) : {}
+  const rawUpdated =
+    value.updatedAtById && typeof value.updatedAtById === 'object'
+      ? (value.updatedAtById as Record<string, unknown>)
+      : {}
   for (const id of Object.keys(threads)) {
     const maybeTs = rawUpdated[id]
     updatedAtById[id] = typeof maybeTs === 'number' ? maybeTs : Date.now()
@@ -439,7 +447,10 @@ export default function App() {
       if (normalized) {
         hasHydratedChatsRef.current = true
         setChatStore(normalized)
-        dispatch({ type: 'LOAD_HISTORY', messages: normalized.threads[normalized.activeChatId ?? ''] ?? [] })
+        dispatch({
+          type: 'LOAD_HISTORY',
+          messages: normalized.threads[normalized.activeChatId ?? ''] ?? [],
+        })
         return
       }
 
@@ -487,7 +498,9 @@ export default function App() {
         sameLength &&
         previousMessages.every(
           (msg, idx) =>
-            msg.id === bounded[idx]?.id && msg.role === bounded[idx]?.role && msg.content === bounded[idx]?.content,
+            msg.id === bounded[idx]?.id &&
+            msg.role === bounded[idx]?.role &&
+            msg.content === bounded[idx]?.content
         )
       if (isSame) return prev
 
@@ -532,25 +545,30 @@ export default function App() {
 
   const sendPromptRef = useRef<((prompt: string) => void) | null>(null)
 
-  const handleWorkerMessage = useCallback(
-    (msg: Parameters<typeof dispatch>[0]) => {
-      if (msg.type === 'SET_REPHRASED_PROMPT') {
-        if (isRephrasingInputRef.current) {
-          setInputPrompt(msg.prompt)
-          dispatch({ type: 'SET_TASK_COMPLETE' })
-        } else {
-          dispatch({ type: 'START_REPHRASED_TASK', prompt: msg.prompt })
-          sendPromptRef.current?.(msg.prompt)
-        }
+  const handleWorkerMessage = useCallback((msg: Parameters<typeof dispatch>[0]) => {
+    if (msg.type === 'SET_REPHRASED_PROMPT') {
+      if (isRephrasingInputRef.current) {
+        setInputPrompt(msg.prompt)
+        dispatch({ type: 'SET_TASK_COMPLETE' })
       } else {
-        dispatch(msg)
+        dispatch({ type: 'START_REPHRASED_TASK', prompt: msg.prompt })
+        sendPromptRef.current?.(msg.prompt)
       }
-    },
-    [],
-  )
+    } else {
+      dispatch(msg)
+    }
+  }, [])
 
-  const { sendPrompt, cancelTask, triggerDownload, saveRoutine, deleteRoutine, runRoutine, notifySettingsChanged, rephrasePrompt } =
-    useChromeMessages(handleWorkerMessage)
+  const {
+    sendPrompt,
+    cancelTask,
+    triggerDownload,
+    saveRoutine,
+    deleteRoutine,
+    runRoutine,
+    notifySettingsChanged,
+    rephrasePrompt,
+  } = useChromeMessages(handleWorkerMessage)
 
   useEffect(() => {
     sendPromptRef.current = sendPrompt
@@ -573,7 +591,7 @@ export default function App() {
       sendPrompt(prompt, history)
       setInputPrompt('')
     },
-    [state.messages, sendPrompt],
+    [state.messages, sendPrompt]
   )
 
   const handleSaveRoutine = useCallback(
@@ -582,7 +600,7 @@ export default function App() {
       saveRoutine(name, state.pendingRoutine.explanation, state.pendingRoutine.actions)
       dispatch({ type: 'CLEAR_PENDING_ROUTINE' })
     },
-    [state.pendingRoutine, saveRoutine],
+    [state.pendingRoutine, saveRoutine]
   )
 
   const handleRunRoutine = useCallback(
@@ -590,7 +608,7 @@ export default function App() {
       dispatch({ type: 'SET_ACTIVE_VIEW', view: 'chat' })
       runRoutine(id)
     },
-    [runRoutine],
+    [runRoutine]
   )
 
   const handleOpenSaveRoutineModal = useCallback(() => {
@@ -635,7 +653,7 @@ export default function App() {
           ...prev.updatedAtById,
           [newChatId]: Date.now(),
         },
-      }),
+      })
     )
     dispatch({ type: 'CLEAR_CHAT' })
     dispatch({ type: 'SET_ACTIVE_VIEW', view: 'chat' })
@@ -655,50 +673,65 @@ export default function App() {
             ...prev.updatedAtById,
             [chatId]: Date.now(),
           },
-        }),
+        })
       )
       dispatch({ type: 'LOAD_HISTORY', messages: selected })
       dispatch({ type: 'SET_ACTIVE_VIEW', view: 'chat' })
     },
-    [chatStore.threads, cancelTask],
+    [chatStore.threads, cancelTask]
   )
 
   const canStartNewChat = state.messages.length > 0 || state.taskStatus === 'running'
 
-  const handleAddMemory = useCallback((text: string) => {
-    const now = Date.now()
-    const next: AgentMemory = {
-      id: crypto.randomUUID(),
-      text,
-      createdAt: now,
-      lastAccessedAt: now,
-    }
-    const updated = [...state.memories, next]
-      .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
-      .slice(0, AGENT_MEMORIES_CAPACITY)
-    dispatch({ type: 'SET_MEMORIES', memories: updated })
-    chrome.storage.local.set({ [AGENT_MEMORIES_KEY]: updated })
-  }, [state.memories])
+  const handleAddMemory = useCallback(
+    (text: string) => {
+      const now = Date.now()
+      const next: AgentMemory = {
+        id: crypto.randomUUID(),
+        text,
+        createdAt: now,
+        lastAccessedAt: now,
+      }
+      const updated = [...state.memories, next]
+        .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
+        .slice(0, AGENT_MEMORIES_CAPACITY)
+      dispatch({ type: 'SET_MEMORIES', memories: updated })
+      chrome.storage.local.set({ [AGENT_MEMORIES_KEY]: updated })
+    },
+    [state.memories]
+  )
 
-  const handleDeleteMemory = useCallback((id: string) => {
-    const updated = state.memories.filter((m) => m.id !== id)
-    dispatch({ type: 'SET_MEMORIES', memories: updated })
-    chrome.storage.local.set({ [AGENT_MEMORIES_KEY]: updated })
-  }, [state.memories])
+  const handleDeleteMemory = useCallback(
+    (id: string) => {
+      const updated = state.memories.filter((m) => m.id !== id)
+      dispatch({ type: 'SET_MEMORIES', memories: updated })
+      chrome.storage.local.set({ [AGENT_MEMORIES_KEY]: updated })
+    },
+    [state.memories]
+  )
 
-  const handleTouchMemory = useCallback((id: string) => {
-    const now = Date.now()
-    const updated = state.memories
-      .map((m) => (m.id === id ? { ...m, lastAccessedAt: now } : m))
-      .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
-      .slice(0, AGENT_MEMORIES_CAPACITY)
-    dispatch({ type: 'SET_MEMORIES', memories: updated })
-    chrome.storage.local.set({ [AGENT_MEMORIES_KEY]: updated })
-  }, [state.memories])
+  const handleTouchMemory = useCallback(
+    (id: string) => {
+      const now = Date.now()
+      const updated = state.memories
+        .map((m) => (m.id === id ? { ...m, lastAccessedAt: now } : m))
+        .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
+        .slice(0, AGENT_MEMORIES_CAPACITY)
+      dispatch({ type: 'SET_MEMORIES', memories: updated })
+      chrome.storage.local.set({ [AGENT_MEMORIES_KEY]: updated })
+    },
+    [state.memories]
+  )
 
   return (
     <div className="app">
       <div className="app-header">
+        <div className="app-brand" aria-label="TabPilot">
+          <picture>
+            <source srcSet="/branding/logo-dark.png" media="(prefers-color-scheme: dark)" />
+            <img src="/branding/logo-light.png" alt="TabPilot" />
+          </picture>
+        </div>
         <StatusBar
           availability={state.aiAvailability}
           onDownload={triggerDownload}
@@ -739,13 +772,15 @@ export default function App() {
             onRephrase={handleRephrase}
           />
           {state.isThinking && <ThinkingBubble rawJson={state.thinkingText} />}
-          {state.pendingRoutine && state.taskStatus === 'success' && !state.showSaveRoutineModal && (
-            <div className="save-routine-cta">
-              <button className="btn-ghost" onClick={handleOpenSaveRoutineModal}>
-                Save as routine
-              </button>
-            </div>
-          )}
+          {state.pendingRoutine &&
+            state.taskStatus === 'success' &&
+            !state.showSaveRoutineModal && (
+              <div className="save-routine-cta">
+                <button className="btn-ghost" onClick={handleOpenSaveRoutineModal}>
+                  Save as routine
+                </button>
+              </div>
+            )}
           {state.currentActions.length > 0 && (
             <ActionLog actions={state.currentActions} taskStatus={state.taskStatus} />
           )}
@@ -757,11 +792,7 @@ export default function App() {
           onSelect={handleSelectRecentChat}
         />
       ) : state.activeView === 'routines' ? (
-        <RoutinesView
-          routines={state.routines}
-          onRun={handleRunRoutine}
-          onDelete={deleteRoutine}
-        />
+        <RoutinesView routines={state.routines} onRun={handleRunRoutine} onDelete={deleteRoutine} />
       ) : (
         <MemoryView
           memories={state.memories}

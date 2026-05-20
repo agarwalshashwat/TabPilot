@@ -13,19 +13,16 @@ declare interface LanguageModelSession {
     options?: {
       signal?: AbortSignal
       responseConstraint?: object
-    },
+    }
   ): Promise<string>
   promptStreaming(
     message: string,
     options?: {
       signal?: AbortSignal
       responseConstraint?: object
-    },
+    }
   ): ReadableStream<string>
-  append(message: {
-    role: 'user' | 'assistant'
-    content: string
-  }): Promise<void>
+  append(message: { role: 'user' | 'assistant'; content: string }): Promise<void>
   clone(options?: { signal?: AbortSignal }): Promise<LanguageModelSession>
   destroy(): void
   readonly contextUsage: number
@@ -49,9 +46,7 @@ declare interface LanguageModelCreateOptions {
 
 declare const LanguageModel: {
   availability(): Promise<LanguageModelAvailability>
-  create(
-    options?: LanguageModelCreateOptions,
-  ): Promise<LanguageModelSession>
+  create(options?: LanguageModelCreateOptions): Promise<LanguageModelSession>
   params(): Promise<{
     defaultTopK: number
     maxTopK: number

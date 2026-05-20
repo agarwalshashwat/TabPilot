@@ -1,23 +1,25 @@
 {
-  "name": "tab-ai-pilot",
+  "name": "tabpilot",
   "private": false,
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=10.0.0"
+    "node": ">=22.12.0",
+    "npm": ">=10"
   },
   "scripts": {
-    "dev": "vite",
-    "typecheck": "tsc -b",
-    "build": "npm run typecheck && vite build",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "preinstall": "node ./scripts/check-node-version.mjs",
+    "postinstall": "node ./scripts/ensure-rolldown-binding.mjs",
+    "dev": "node ./node_modules/vite/bin/vite.js",
+    "typecheck": "node ./node_modules/typescript/bin/tsc -b",
+    "build": "npm run typecheck && node ./node_modules/vite/bin/vite.js build",
+    "lint": "node ./node_modules/eslint/bin/eslint.js .",
+    "lint:fix": "node ./node_modules/eslint/bin/eslint.js . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "preview": "vite preview",
-    "test": "playwright test"
+    "preview": "node ./node_modules/vite/bin/vite.js preview",
+    "test": "node ./node_modules/@playwright/test/cli.js test"
   },
   "dependencies": {
     "puppeteer": "^25.0.4",

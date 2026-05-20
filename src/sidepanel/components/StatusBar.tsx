@@ -26,8 +26,7 @@ function formatBytes(bytes: number): string {
 export function StatusBar({ availability, onDownload, downloadProgress, providerLabel }: Props) {
   const dotClass = availability ?? 'checking'
   const baseLabel = availability ? LABELS[availability] : 'Checking AI status…'
-  const label =
-    availability === 'available' && providerLabel ? `${providerLabel} ready` : baseLabel
+  const label = availability === 'available' && providerLabel ? `${providerLabel} ready` : baseLabel
   const isClickable = availability === 'downloadable'
   const isDownloading = availability === 'downloading'
 
@@ -46,12 +45,8 @@ export function StatusBar({ availability, onDownload, downloadProgress, provider
       <div className="status-bar-row">
         <span className={`status-dot ${dotClass}`} />
         <span className="status-label">{label}</span>
-        {isClickable && (
-          <span className="status-download-cta">↓ Download</span>
-        )}
-        {isDownloading && pct != null && (
-          <span className="status-pct">{pct}%</span>
-        )}
+        {isClickable && <span className="status-download-cta">↓ Download</span>}
+        {isDownloading && pct != null && <span className="status-pct">{pct}%</span>}
       </div>
 
       {isDownloading && (
@@ -67,8 +62,7 @@ export function StatusBar({ availability, onDownload, downloadProgress, provider
       {isDownloading && downloadProgress && downloadProgress.loaded > 0 && (
         <div className="status-progress-bytes">
           {formatBytes(downloadProgress.loaded)}
-          {downloadProgress.total > 0 &&
-            ` / ${formatBytes(downloadProgress.total)}`}
+          {downloadProgress.total > 0 && ` / ${formatBytes(downloadProgress.total)}`}
         </div>
       )}
     </div>

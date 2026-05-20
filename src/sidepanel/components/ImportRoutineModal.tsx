@@ -26,8 +26,14 @@ export function ImportRoutineModal({ onClose }: Props) {
   const handleImport = () => {
     setError(null)
     const trimmedName = name.trim()
-    if (!trimmedName) { setError('Name is required'); return }
-    if (!json.trim()) { setError('JSON is required'); return }
+    if (!trimmedName) {
+      setError('Name is required')
+      return
+    }
+    if (!json.trim()) {
+      setError('JSON is required')
+      return
+    }
 
     let actions: SavedAction[]
     try {
@@ -40,7 +46,7 @@ export function ImportRoutineModal({ onClose }: Props) {
     // Post directly via chrome.runtime port — use a one-shot connect since we
     // don't have access to the hook here. The worker will respond with ROUTINES_LIST.
     try {
-      const port = chrome.runtime.connect({ name: 'tab-ai-pilot' })
+      const port = chrome.runtime.connect({ name: 'tabpilot' })
       port.postMessage({
         type: 'SAVE_ROUTINE',
         name: trimmedName,
@@ -75,8 +81,12 @@ export function ImportRoutineModal({ onClose }: Props) {
         />
         {error && <p className="modal-error">{error}</p>}
         <div className="modal-buttons">
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleImport}>Import</button>
+          <button className="btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={handleImport}>
+            Import
+          </button>
         </div>
       </div>
     </div>

@@ -4,14 +4,10 @@ import { crx } from '@crxjs/vite-plugin'
 import manifest from './manifest.json'
 
 export default defineConfig({
-  plugins: [
-    react(),
-    crx({ manifest }),
-  ],
+  plugins: [react(), crx({ manifest })],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     target: 'chrome120',
   },
 })
-

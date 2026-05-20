@@ -90,7 +90,9 @@ export function ActionLog({ actions, taskStatus }: Props) {
             {formatAction(action)}
             {error && <div className="action-error">{error}</div>}
             {formatDebug(debug).map((line, idx) => (
-              <div key={idx} className="action-debug">{line}</div>
+              <div key={idx} className="action-debug">
+                {line}
+              </div>
             ))}
           </div>
         </div>

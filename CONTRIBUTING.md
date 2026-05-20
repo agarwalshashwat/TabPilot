@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for contributing to Tab AI Pilot.
+Thanks for contributing to TabPilot.
 
 ## Development Setup
 
-1. Install Node.js 20+ and npm 10+
+1. Install Node.js 22.12+ and npm 10+ (Tested on Node 22 and 26)
 2. Install dependencies:
 
    npm install
