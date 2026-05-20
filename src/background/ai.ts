@@ -47,6 +47,7 @@ const RESPONSE_SCHEMA = {
               'getPageContent',
               'groupTabs',
               'waitMs',
+              'scroll',
             ],
           },
           url: { type: 'string' },
@@ -56,6 +57,8 @@ const RESPONSE_SCHEMA = {
           value: { type: 'string' },
           title: { type: 'string' },
           ms: { type: 'number' },
+          direction: { type: 'string', enum: ['up', 'down'] },
+          pixels: { type: 'number' },
           descriptor: {
             type: 'object',
             additionalProperties: false,
@@ -74,12 +77,13 @@ const RESPONSE_SCHEMA = {
 // ── System prompt (shared across all providers) ───────────────────────────────
 const SYSTEM_PROMPT = `You are a browser tab automation agent. Output ONLY a JSON object — no markdown.
 Schema: {"explanation":"string","actions":[...]}
-Actions: openTab(url), closeTab(tabId), switchTab(tabId), navigateTo(tabId,url), clickElement(tabId,selector), fillForm(tabId,selector,value), getPageContent(tabId), groupTabs(tabIds,title?), waitMs(ms).
+Actions: openTab(url), closeTab(tabId), switchTab(tabId), navigateTo(tabId,url), clickElement(tabId,selector), fillForm(tabId,selector,value), getPageContent(tabId), groupTabs(tabIds,title?), waitMs(ms), scroll(tabId,direction,pixels).
 Rules:
 - Keep explanation to 1 short sentence.
 - Only use tabIds from the provided list.
 - Every action must include all required fields for that action type.
 - For openTab and navigateTo, always provide a fully-qualified https:// URL.
+- For scroll, use direction "up" or "down" and pixels (number).
 - If request is vague or a greeting, set actions:[] and ask for clarification.
 - Never touch the active tab unless explicitly asked.
 - Never invent actions not requested.
@@ -113,6 +117,11 @@ const ACTION_TYPE_ALIASES: Record<string, TabAction['type']> = {
   wait: 'waitMs',
   waitms: 'waitMs',
   wait_ms: 'waitMs',
+  scroll: 'scroll',
+  scrolldown: 'scroll',
+  scrolleddown: 'scroll',
+  scrollup: 'scroll',
+  scrolledup: 'scroll',
 }
 
 const AGENT_MEMORIES_KEY = 'agent_memories'
@@ -348,8 +357,22 @@ function normalizeAndValidateResponse(
       }
 
       case 'waitMs': {
-        const ms = readNumber(action.ms)
+        // Look for ms, duration (alias), or seconds (alias)
+        const ms =
+          readNumber(action.ms) ??
+          readNumber(action.duration) ??
+          (readNumber(action.seconds) != null ? (readNumber(action.seconds) || 0) * 1000 : null)
         return { type, ms: ms != null ? Math.max(0, Math.floor(ms)) : 500 }
+      }
+
+      case 'scroll': {
+        const tabId = readNumber(action.tabId) ?? activeTabId
+        if (tabId == null) {
+          throw new Error(`scroll action missing tabId at index ${index}`)
+        }
+        const direction = action.direction === 'up' ? 'up' : 'down'
+        const pixels = readNumber(action.pixels) ?? 500
+        return { type, tabId, direction, pixels }
       }
     }
   })

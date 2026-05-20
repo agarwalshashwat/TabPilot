@@ -34,6 +34,8 @@ function formatAction(action: TabAction): string {
       return `Group tabs [${action.tabIds.join(', ')}]${action.title ? ` → "${action.title}"` : ''}`
     case 'waitMs':
       return `Wait ${action.ms} ms`
+    case 'scroll':
+      return `Scroll ${action.direction} ${action.pixels}px on tab #${action.tabId}`
     default:
       return `Unknown action (${(action as { type?: string }).type ?? 'unknown'})`
   }

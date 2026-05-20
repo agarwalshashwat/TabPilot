@@ -345,6 +345,12 @@ function domGetContent(): string {
   return `Title: ${document.title}\nURL: ${location.href}\n\n${text.slice(0, 4000)}`
 }
 
+function domScroll(direction: 'up' | 'down', pixels: number): { success: boolean } {
+  const amount = direction === 'down' ? pixels : -pixels
+  window.scrollBy({ top: amount, behavior: 'smooth' })
+  return { success: true }
+}
+
 interface DomActionResult {
   success: boolean
   error?: string
@@ -676,6 +682,18 @@ async function runAction(
       // Cap at 10 s to prevent runaway waits.
       await new Promise<void>((resolve) => setTimeout(resolve, Math.min(action.ms, 10_000)))
       return { pageContent: null }
+
+    case 'scroll': {
+      await waitForTabLoad(action.tabId, signal)
+      await chrome.scripting.executeScript({
+        target: { tabId: action.tabId },
+        func: domScroll,
+        args: [action.direction, action.pixels],
+      })
+      // Smooth scrolling takes a moment; brief pause to let it finish.
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      return { pageContent: null }
+    }
 
     default:
       throw new Error(`Unsupported action type: ${(action as { type?: string }).type ?? 'unknown'}`)

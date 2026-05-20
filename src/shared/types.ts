@@ -51,6 +51,13 @@ export interface WaitMsAction {
   ms: number
 }
 
+export interface ScrollAction {
+  type: 'scroll'
+  tabId: number
+  direction: 'up' | 'down'
+  pixels: number
+}
+
 export type TabAction =
   | OpenTabAction
   | CloseTabAction
@@ -61,6 +68,7 @@ export type TabAction =
   | GetPageContentAction
   | GroupTabsAction
   | WaitMsAction
+  | ScrollAction
 
 // ── AI response shape ─────────────────────────────────────────────────────────
 
