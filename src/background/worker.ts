@@ -16,7 +16,7 @@ import {
 } from './routines'
 import { removeAllOverlays } from './overlay'
 
-const DEBUG_LOGS = false
+const DEBUG_LOGS = true
 const LOG_PREFIX = '[TAP][worker]'
 const log = (...args: unknown[]) => {
   if (DEBUG_LOGS) console.log(LOG_PREFIX, ...args)

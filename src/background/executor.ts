@@ -1,7 +1,7 @@
 import type { ActionProgressMessage, ActionSelectionDebug, TabAction } from '../shared/types'
 import { injectOverlay, removeOverlay } from './overlay'
 
-const DEBUG_LOGS = false
+const DEBUG_LOGS = true
 const LOG_PREFIX = '[TAP][executor]'
 const log = (...args: unknown[]) => {
   if (DEBUG_LOGS) console.log(LOG_PREFIX, ...args)

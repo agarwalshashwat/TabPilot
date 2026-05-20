@@ -10,7 +10,7 @@ import type {
 } from '../shared/types'
 import { getSettings } from './settings'
 
-const DEBUG_LOGS = false
+const DEBUG_LOGS = true
 const LOG_PREFIX = '[TAP][ai]'
 const log = (...args: unknown[]) => {
   if (DEBUG_LOGS) console.log(LOG_PREFIX, ...args)
