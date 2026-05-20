@@ -662,12 +662,23 @@ export async function promptToActions(
   const settings = await getSettings()
   const storedMemories = await loadAgentMemories()
   const memories = await refreshMemoriesOnInjection(storedMemories)
+
+  // 1. Internal rephrasing: Translate "go to reddit" -> "Navigate to https://reddit.com"
+  // This ensures the planning engine always sees explicit, site-neutral instructions.
+  let refinedPrompt = userPrompt
+  try {
+    refinedPrompt = await rephraseUserPrompt(userPrompt, signal)
+    log('Prompt rephrased before planning', { original: userPrompt, rephrased: refinedPrompt })
+  } catch (err) {
+    warn('Rephrasing failed during planning, falling back to original', err)
+  }
+
   log('promptToActions start', {
     provider: settings.provider,
     tabs: tabs.length,
     memories: memories.length,
     activeTabId,
-    prompt: userPrompt,
+    prompt: refinedPrompt,
   })
 
   const tabList = tabs
@@ -687,7 +698,7 @@ export async function promptToActions(
     tabList || '  (none)',
     activeTabId != null ? `Active tab id: ${activeTabId}` : '',
     '',
-    `User request: ${userPrompt}`,
+    `User request: ${refinedPrompt}`,
   ]
     .filter(Boolean)
     .join('\n')
