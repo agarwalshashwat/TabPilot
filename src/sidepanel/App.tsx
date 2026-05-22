@@ -770,6 +770,7 @@ export default function App() {
             isThinking={state.isThinking}
             onRetry={handleRetry}
             onRephrase={handleRephrase}
+            onSuggestionClick={(text) => handleSubmit(text)}
           />
           {state.isThinking && <ThinkingBubble rawJson={state.thinkingText} />}
           {state.pendingRoutine &&

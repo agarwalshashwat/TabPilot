@@ -9,11 +9,11 @@ interface Props {
 }
 
 const LABELS: Record<NonNullable<AIAvailability>, string> = {
-  available: 'Gemini Nano ready',
-  downloadable: 'Gemini Nano not downloaded — click to download',
-  downloading: 'Downloading Gemini Nano…',
-  unavailable: 'Gemini Nano unavailable on this device',
-  needs_api_key: 'No API key configured — open settings ⚙',
+  available: 'AI Ready',
+  downloadable: 'Needs Download',
+  downloading: 'Downloading...',
+  unavailable: 'AI Unsupported',
+  needs_api_key: 'Setup Required',
 }
 
 function formatBytes(bytes: number): string {

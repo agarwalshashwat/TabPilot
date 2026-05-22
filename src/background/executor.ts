@@ -179,7 +179,10 @@ function domClick(selector: string): {
 
   return {
     success: false,
-    error: `Element not found: ${selector}`,
+    error:
+      ranked.length > 0
+        ? `Could not find a reliable match for "${selector}". Found ${ranked.length} candidates, but none were sufficiently relevant or clickable.`
+        : `No elements matching "${selector}" were found on the page.`,
     candidates: ranked.length,
   }
 }
@@ -316,7 +319,14 @@ function domFill(
   }
 
   if (!target || !chosen) {
-    return { success: false, error: `Element not found: ${selector}`, candidates: ranked.length }
+    return {
+      success: false,
+      error:
+        ranked.length > 0
+          ? `Could not find a reliable input field for "${selector}". Found ${ranked.length} candidates, but none were sufficiently relevant.`
+          : `No input fields matching "${selector}" were found on the page.`,
+      candidates: ranked.length,
+    }
   }
 
   target.scrollIntoView({ block: 'center', behavior: 'auto' })
@@ -554,18 +564,26 @@ export async function executeActions(
         onProgress({ index: i, total: actions.length, action, status: 'done', debug: result.debug })
         log('Action done', { index: i, type: action.type })
       } catch (err) {
-        const error = err instanceof Error ? err.message : String(err)
+        const errorMsg = err instanceof Error ? err.message : String(err)
         const debug = (err as { debug?: ActionSelectionDebug })?.debug
         onProgress({
           index: i,
           total: actions.length,
           action,
           status: 'error',
-          error,
+          error: errorMsg,
           debug,
         })
-        warn('Action failed', { index: i, type: action.type, error })
-        throw err
+        warn('Action failed', { index: i, type: action.type, error: errorMsg })
+
+        // Attach action context to the error so the worker can provide feedback to AI.
+        const wrappedError = new Error(errorMsg) as Error & {
+          action?: TabAction
+          debug?: ActionSelectionDebug
+        }
+        wrappedError.action = action
+        wrappedError.debug = debug
+        throw wrappedError
       }
     }
   } finally {
@@ -592,6 +610,27 @@ async function runAction(
       if (tab.id != null) {
         await waitForTabLoad(tab.id, signal)
         onOpenedTab?.(tab.id)
+
+        // Post-load diagnostic: check for obvious error states like 404s.
+        try {
+          const scriptResult = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const txt = document.body.innerText.toLowerCase()
+              const tit = document.title.toLowerCase()
+              const isFourOhFour =
+                tit.includes('404') ||
+                tit.includes('not found') ||
+                (txt.includes('404') && txt.length < 1000)
+              return isFourOhFour ? '404' : 'ok'
+            },
+          })
+          if (scriptResult?.[0]?.result === '404') {
+            throw new Error(`The page at ${action.url} returned a 404 Not Found error.`)
+          }
+        } catch {
+          // Ignore errors during diagnostic.
+        }
       }
       return { pageContent: null }
     }
@@ -604,10 +643,33 @@ async function runAction(
       await chrome.tabs.update(action.tabId, { active: true })
       return { pageContent: null }
 
-    case 'navigateTo':
+    case 'navigateTo': {
       if (!action.url) throw new Error('navigateTo action missing url')
       await chrome.tabs.update(action.tabId, { url: sanitizeUrl(action.url) })
+      await waitForTabLoad(action.tabId, signal)
+
+      // Post-load diagnostic: check for obvious error states like 404s.
+      try {
+        const scriptResult = await chrome.scripting.executeScript({
+          target: { tabId: action.tabId },
+          func: () => {
+            const txt = document.body.innerText.toLowerCase()
+            const tit = document.title.toLowerCase()
+            const isFourOhFour =
+              tit.includes('404') ||
+              tit.includes('not found') ||
+              (txt.includes('404') && txt.length < 1000)
+            return isFourOhFour ? '404' : 'ok'
+          },
+        })
+        if (scriptResult?.[0]?.result === '404') {
+          throw new Error(`The page at ${action.url} returned a 404 Not Found error.`)
+        }
+      } catch {
+        // Ignore errors during diagnostic; scriptability issues are handled by waitForTabLoad.
+      }
       return { pageContent: null }
+    }
 
     case 'clickElement': {
       await waitForTabLoad(action.tabId, signal)

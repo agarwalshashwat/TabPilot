@@ -75,21 +75,26 @@ const RESPONSE_SCHEMA = {
 }
 
 // ── System prompt (shared across all providers) ───────────────────────────────
-const SYSTEM_PROMPT = `You are a browser tab automation agent. Output ONLY a JSON object — no markdown.
+const SYSTEM_PROMPT = `You are TabPilot, a collaborative browser automation assistant. Output ONLY a single JSON object — no markdown.
 Schema: {"explanation":"string","actions":[...]}
 Actions: openTab(url), closeTab(tabId), switchTab(tabId), navigateTo(tabId,url), clickElement(tabId,selector), fillForm(tabId,selector,value), getPageContent(tabId), groupTabs(tabIds,title?), waitMs(ms), scroll(tabId,direction,pixels).
 Rules:
-- Keep explanation to 1 short sentence.
-- Only use tabIds from the provided list.
-- Every action must include all required fields for that action type.
+- You are an autonomous agent capable of executing multi-step tasks.
+- ALWAYS propose the entire sequence of actions needed to achieve the final goal.
+- If a task involves searching and playing, you MUST include the final click to play the content. 
+- A complete search-and-play sequence typically looks like: 
+  1. navigateTo/openTab to the site.
+  2. fillForm in the search box.
+  3. clickElement on the search button/magnifying glass.
+  4. waitMs(2000) to allow results to load.
+  5. clickElement on the most relevant search result/video thumbnail.
+- If a direct URL fails or an element isn't found, you will receive "Execution Feedback". Use it to self-correct and PIVOT your strategy.
+- If a site returns a 404 or fails to load, try searching for the correct page (e.g. via Google or YouTube).
+- Keep "explanation" to 1 short, helpful sentence about your plan or why you are self-correcting.
+- The "actions" array MUST contain objects with the action "type" directly (e.g. {"type":"openTab","url":"..."}). Do NOT nest it under an "action" key.
 - For openTab and navigateTo, always provide a fully-qualified https:// URL.
-- For scroll, use direction "up" or "down" and pixels (number).
-- If request is vague or a greeting, set actions:[] and ask for clarification.
 - Never touch the active tab unless explicitly asked.
-- Never invent actions not requested.
-- For clickElement/fillForm, use modern stable selectors (id/name/aria-label/placeholder/data-testid) and avoid brittle class chains.
-- Prefer selectors that represent user-visible intent (labels, roles, named fields, action buttons) over presentation-only classes.
-- For clickElement/fillForm, you may add descriptor:{intent,label,role} to express user intent for robust element ranking.`
+- If the request is a simple greeting, explain who you are and ask how you can help.`
 
 const ACTION_TYPE_ALIASES: Record<string, TabAction['type']> = {
   opentab: 'openTab',
@@ -199,22 +204,31 @@ function deriveSearchQuery(prompt: string): string {
       )
       .replace(/^(click\s+on\s+|click\s+)/i, '')
       .replace(/\b(first|second|third)\b\s+video\b/i, '')
+      .replace(/(\s+in\s+a\s+new\s+tab|\s+on\s+google|\s+on\s+youtube)$/i, '')
       .replace(/\s+/g, ' ')
       .trim()
 
   const chainedParts = text
-    .split(/\s*->\s*|\bthen\b|\n+/i)
+    .split(/\s*->\s*|\bthen\b|\n+|\.\s+/i)
     .map(normalizeIntentFragment)
     .filter(Boolean)
 
-  const stopPhrases = [/^open\s+(a\s+)?new\s+tab/i, /^click\b/i, /^with\s+youtube$/i, /^youtube$/i]
+  const stopPhrases = [
+    /^open\s+(a\s+)?new\s+tab/i,
+    /^click\b/i,
+    /^with\s+youtube$/i,
+    /^youtube$/i,
+    /^wait\s+for/i,
+    /^scroll\s+down/i,
+  ]
 
   const candidates = (
     chainedParts.length > 0 ? chainedParts : [normalizeIntentFragment(text)]
   ).filter((part) => !stopPhrases.some((re) => re.test(part)))
 
-  if (candidates.length === 0) return text
-  return candidates.sort((a, b) => b.length - a.length)[0]
+  if (candidates.length === 0) return text.slice(0, 100)
+  // Pick the candidate that looks most like a topic or URL
+  return candidates.sort((a, b) => b.length - a.length)[0].slice(0, 150)
 }
 
 function buildSearchUrl(query: string): string {
@@ -280,7 +294,12 @@ function normalizeAndValidateResponse(
   }
 
   const normalized: TabAction[] = raw.actions.map((actionRaw, index) => {
-    const action = actionRaw as Record<string, unknown>
+    // LLMs sometimes nest the action under an "action" key despite schema instructions.
+    let action = actionRaw as Record<string, unknown>
+    if (typeof action.action === 'object' && action.action !== null) {
+      action = action.action as Record<string, unknown>
+    }
+
     const type = normalizeActionType(action?.type)
     if (!type) {
       throw new Error(`Unsupported action type: ${String(action?.type ?? 'unknown')}`)
@@ -288,10 +307,12 @@ function normalizeAndValidateResponse(
 
     switch (type) {
       case 'openTab': {
-        const rawUrl =
-          typeof action.url === 'string' && action.url.trim()
-            ? action.url.trim()
-            : buildSearchUrl(userPrompt)
+        const rawUrl = typeof action.url === 'string' && action.url.trim() ? action.url.trim() : ''
+
+        if (!rawUrl) {
+          return { type, url: buildSearchUrl(userPrompt) }
+        }
+
         const url = shouldCoerceYouTubeWatchToSearch(rawUrl, userPrompt)
           ? buildSearchUrl(userPrompt)
           : rawUrl
@@ -303,10 +324,12 @@ function normalizeAndValidateResponse(
         if (tabId == null) {
           throw new Error(`navigateTo action missing tabId at index ${index}`)
         }
-        const rawUrl =
-          typeof action.url === 'string' && action.url.trim()
-            ? action.url.trim()
-            : buildSearchUrl(userPrompt)
+        const rawUrl = typeof action.url === 'string' && action.url.trim() ? action.url.trim() : ''
+
+        if (!rawUrl) {
+          return { type, tabId, url: buildSearchUrl(userPrompt) }
+        }
+
         const url = shouldCoerceYouTubeWatchToSearch(rawUrl, userPrompt)
           ? buildSearchUrl(userPrompt)
           : rawUrl
@@ -753,13 +776,13 @@ export async function rephraseUserPrompt(
   const settings = await getSettings()
   log('rephraseUserPrompt start', { provider: settings.provider, prompt: userPrompt })
 
-  const REPHRASE_SYSTEM_PROMPT = `You are an expert prompt engineer and browser automation translator.
-Your job is to rewrite the user's natural language request into a highly precise, explicit, and structured instruction designed for a browser automation tool.
+  const REPHRASE_SYSTEM_PROMPT = `You are an expert prompt engineer and browser automation translator for TabPilot.
+Your job is to rewrite the user's natural language request (and any provided "Execution Feedback") into a highly precise, explicit instruction for automation.
 Make sure to:
-1. Keep the user's core intent exactly unchanged.
-2. Translate vague goals into explicit instructions (e.g. "go to gmail" -> "Navigate the active tab to https://mail.google.com and wait for it to load").
-3. Make elements, actions, and expectations clear for downstream automation.
-4. Output ONLY the optimized/rephrased instruction. Do NOT add any preamble, explanations, quotes, or conversational filler.`
+1. Keep the user's core intent unchanged.
+2. If "Execution Feedback" is present (e.g. "Action failed: 404"), pivot the instruction to a recovery plan (e.g. "Search for [topic] on Google instead of direct navigation").
+3. Translate vague goals into explicit instructions.
+4. Output ONLY the optimized instruction. No preamble or conversational filler.`
 
   if (settings.provider === 'openai') {
     const endpoint = 'https://api.openai.com/v1/chat/completions'

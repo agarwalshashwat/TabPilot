@@ -8,10 +8,10 @@ interface Props {
 }
 
 const STATUS_ICONS: Record<ActionWithStatus['status'], string> = {
-  pending: '·',
-  running: '▶',
+  pending: '○',
+  running: '●',
   done: '✓',
-  error: '✗',
+  error: '!',
 }
 
 function formatAction(action: TabAction): string {

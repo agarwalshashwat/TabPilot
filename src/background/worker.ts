@@ -1,4 +1,10 @@
-import type { WorkerInboundMessage, WorkerOutboundMessage, TabInfo, Routine } from '../shared/types'
+import type {
+  WorkerInboundMessage,
+  WorkerOutboundMessage,
+  TabInfo,
+  Routine,
+  TabAction,
+} from '../shared/types'
 import {
   checkAvailability,
   checkChromeAIAvailability,
@@ -102,95 +108,140 @@ chrome.runtime.onConnect.addListener((port) => {
           const { signal } = currentAbortController
 
           try {
-            const tabs = await getTabContext()
-            const activeTab = tabs.find((t) => t.active)
-            let latestStreamText = ''
-            let lastPostedStreamTextLength = 0
-            let lastPostedStreamAt = 0
+            let retryCount = 0
+            const MAX_RETRIES = 3
+            let currentPrompt = msg.prompt
+            let executionSuccess = false
 
-            // Signal that the AI is about to start generating.
-            safePost({ type: 'AI_THINKING' } satisfies WorkerOutboundMessage)
+            while (retryCount < MAX_RETRIES && !executionSuccess) {
+              try {
+                const tabs = await getTabContext()
+                const activeTab = tabs.find((t) => t.active)
+                let latestStreamText = ''
+                let lastPostedStreamTextLength = 0
+                let lastPostedStreamAt = 0
 
-            const aiResponse = await promptToActions(
-              msg.prompt,
-              tabs,
-              activeTab?.id ?? null,
-              msg.history || [],
-              (text) => {
-                latestStreamText = text
-                const now = Date.now()
-                const delta = text.length - lastPostedStreamTextLength
-                const shouldPost =
-                  now - lastPostedStreamAt >= STREAM_CHUNK_THROTTLE_MS ||
-                  delta >= STREAM_CHUNK_MIN_DELTA_CHARS
-                if (!shouldPost) return
+                // Signal that the AI is about to start generating.
+                safePost({ type: 'AI_THINKING' } satisfies WorkerOutboundMessage)
 
-                safePost({
-                  type: 'AI_STREAM_CHUNK',
-                  text,
-                } satisfies WorkerOutboundMessage)
-                lastPostedStreamAt = now
-                lastPostedStreamTextLength = text.length
-              },
-              signal
-            )
+                const aiResponse = await promptToActions(
+                  currentPrompt,
+                  tabs,
+                  activeTab?.id ?? null,
+                  msg.history || [],
+                  (text) => {
+                    latestStreamText = text
+                    const now = Date.now()
+                    const delta = text.length - lastPostedStreamTextLength
+                    const shouldPost =
+                      now - lastPostedStreamAt >= STREAM_CHUNK_THROTTLE_MS ||
+                      delta >= STREAM_CHUNK_MIN_DELTA_CHARS
+                    if (!shouldPost) return
 
-            if (latestStreamText.length > lastPostedStreamTextLength) {
-              safePost({
-                type: 'AI_STREAM_CHUNK',
-                text: latestStreamText,
-              } satisfies WorkerOutboundMessage)
-            }
+                    safePost({
+                      type: 'AI_STREAM_CHUNK',
+                      text,
+                    } satisfies WorkerOutboundMessage)
+                    lastPostedStreamAt = now
+                    lastPostedStreamTextLength = text.length
+                  },
+                  signal
+                )
 
-            log('AI produced action plan', {
-              explanation: aiResponse.explanation,
-              actionCount: aiResponse.actions.length,
-            })
-
-            const aiMsg: WorkerOutboundMessage = {
-              type: 'AI_RESPONSE',
-              explanation: aiResponse.explanation,
-              actions: aiResponse.actions,
-            }
-            safePost(aiMsg)
-
-            // Snapshot the actions (capture live tab URLs) so the UI can offer
-            // "Save as Routine" with pre-filled SavedAction[] data.
-            const savedActions = await snapshotActions(aiResponse.actions).catch(() => [])
-            if (savedActions.length > 0) {
-              safePost({
-                type: 'TASK_SNAPSHOT',
-                explanation: aiResponse.explanation,
-                actions: savedActions,
-              } satisfies WorkerOutboundMessage)
-            }
-
-            const result = await executeActions(
-              aiResponse.actions,
-              (progress) => {
-                const progressMsg: WorkerOutboundMessage = {
-                  type: 'ACTION_PROGRESS',
-                  ...progress,
+                if (latestStreamText.length > lastPostedStreamTextLength) {
+                  safePost({
+                    type: 'AI_STREAM_CHUNK',
+                    text: latestStreamText,
+                  } satisfies WorkerOutboundMessage)
                 }
-                safePost(progressMsg)
-              },
-              signal
-            )
 
-            log('Action execution complete', { pageContents: result.pageContents.length })
+                log('AI produced action plan', {
+                  explanation: aiResponse.explanation,
+                  actionCount: aiResponse.actions.length,
+                  retryCount,
+                })
 
-            if (result.pageContents.length > 0) {
-              const followUp = buildPageContentSummary(result.pageContents)
-              safePost({
-                type: 'ASSISTANT_MESSAGE',
-                content: followUp,
-              } satisfies WorkerOutboundMessage)
+                const aiMsg: WorkerOutboundMessage = {
+                  type: 'AI_RESPONSE',
+                  explanation: aiResponse.explanation,
+                  actions: aiResponse.actions,
+                }
+                safePost(aiMsg)
+
+                // Snapshot the actions (capture live tab URLs) so the UI can offer
+                // "Save as Routine" with pre-filled SavedAction[] data.
+                const savedActions = await snapshotActions(aiResponse.actions).catch(() => [])
+                if (savedActions.length > 0) {
+                  safePost({
+                    type: 'TASK_SNAPSHOT',
+                    explanation: aiResponse.explanation,
+                    actions: savedActions,
+                  } satisfies WorkerOutboundMessage)
+                }
+
+                const result = await executeActions(
+                  aiResponse.actions,
+                  (progress) => {
+                    const progressMsg: WorkerOutboundMessage = {
+                      type: 'ACTION_PROGRESS',
+                      ...progress,
+                    }
+                    safePost(progressMsg)
+                  },
+                  signal
+                )
+
+                log('Action execution complete', {
+                  pageContents: result.pageContents.length,
+                  retryCount,
+                })
+
+                if (result.pageContents.length > 0) {
+                  const followUp = buildPageContentSummary(result.pageContents)
+                  safePost({
+                    type: 'ASSISTANT_MESSAGE',
+                    content: followUp,
+                  } satisfies WorkerOutboundMessage)
+                }
+
+                executionSuccess = true
+                safePost({ type: 'TASK_COMPLETE' } satisfies WorkerOutboundMessage)
+                log('EXECUTE_PROMPT complete')
+              } catch (err) {
+                if ((err as Error).message === 'Task cancelled') return
+
+                retryCount++
+                if (retryCount >= MAX_RETRIES) {
+                  throw err
+                }
+
+                const errorStr = err instanceof Error ? err.message : String(err)
+                const failedAction = (err as Error & { action?: TabAction }).action
+                let feedback = `Execution Feedback: The previous plan failed with error: "${errorStr}".`
+
+                // If we know which tab failed, try to get its content to help the AI diagnose.
+                if (failedAction && 'tabId' in failedAction) {
+                  try {
+                    const diagnostic = await executeActions(
+                      [{ type: 'getPageContent', tabId: failedAction.tabId }],
+                      () => {},
+                      signal
+                    )
+                    if (diagnostic.pageContents[0]) {
+                      feedback += `\n\nCurrent content of the failing tab:\n${diagnostic.pageContents[0]}`
+                    }
+                  } catch {
+                    // Ignore diagnostic failures.
+                  }
+                }
+
+                currentPrompt = `${feedback}\n\nPlease revise your strategy to achieve the user's goal: "${msg.prompt}".`
+                warn(`Retrying EXECUTE_PROMPT (attempt ${retryCount}/${MAX_RETRIES})`, {
+                  error: errorStr,
+                })
+              }
             }
-
-            safePost({ type: 'TASK_COMPLETE' } satisfies WorkerOutboundMessage)
-            log('EXECUTE_PROMPT complete')
           } catch (err) {
-            if ((err as Error).message === 'Task cancelled') return
             const errorMsg: WorkerOutboundMessage = {
               type: 'TASK_ERROR',
               error: err instanceof Error ? err.message : String(err),

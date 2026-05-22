@@ -8,6 +8,7 @@ interface Props {
   taskStatus: TaskStatus
   onRetry: () => void
   onRephrase: () => void
+  onSuggestionClick?: (text: string) => void
   isThinking?: boolean
 }
 
@@ -17,6 +18,7 @@ export function MessageList({
   taskStatus,
   onRetry,
   onRephrase,
+  onSuggestionClick,
   isThinking,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -26,13 +28,28 @@ export function MessageList({
   }, [messages])
 
   if (messages.length === 0) {
+    const suggestions = [
+      'Close all tabs from github.com',
+      'Group all news sites',
+      'Scroll to bottom and click "Load More"',
+    ]
+
     return (
       <div className="message-list-empty">
-        <strong>TabPilot</strong>
-        <br />
-        Describe what you want to do with your tabs.
-        <br />
-        <em>e.g. "Open GitHub and close all other tabs"</em>
+        <div className="empty-state-icon">🪄</div>
+        <h2>Ready to help</h2>
+        <p>Describe what you want to do with your tabs.</p>
+        <div className="empty-suggestions">
+          {suggestions.map((s) => (
+            <div
+              key={s}
+              className="suggestion-chip"
+              onClick={() => onSuggestionClick?.(s.replace(/[""]/g, ''))}
+            >
+              "{s}"
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

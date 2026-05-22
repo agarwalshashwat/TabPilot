@@ -75,35 +75,36 @@ export function ChatInput({
           disabled={inputDisabled}
           rows={1}
         />
-        {disabled ? (
-          <button className="btn btn-cancel" onClick={onCancel}>
-            Cancel
-          </button>
-        ) : (
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {value.trim() && (
-              <button
-                className="btn btn-ghost rephrase-input-btn"
-                onClick={onRephrase}
-                type="button"
-                disabled={availability !== 'available'}
-                title="Optimize and rephrase this prompt"
-                style={{ whiteSpace: 'nowrap', padding: '0 8px' }}
-              >
-                ✨ Rephrase
-              </button>
-            )}
-            <button
-              className="btn btn-primary"
-              onClick={handleSubmit}
-              disabled={!value.trim() || availability !== 'available'}
-            >
-              Run
+        <div className="chat-input-actions">
+          {disabled ? (
+            <button className="btn btn-cancel" onClick={onCancel}>
+              Cancel action
             </button>
-          </div>
-        )}
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {value.trim() && (
+                <button
+                  className="btn btn-secondary rephrase-input-btn"
+                  onClick={onRephrase}
+                  type="button"
+                  disabled={availability !== 'available'}
+                  title="Optimize and rephrase this prompt"
+                >
+                  ✨ Rephrase
+                </button>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={handleSubmit}
+                disabled={!value.trim() || availability !== 'available'}
+              >
+                Run Action
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-      {!disabled && <p className="input-hint">Enter to send · Shift+Enter for newline</p>}
+      {!disabled && <p className="input-hint">Press Enter to run · Shift+Enter for newline</p>}
     </div>
   )
 }
