@@ -47,6 +47,7 @@ const RESPONSE_SCHEMA = {
               'getPageContent',
               'groupTabs',
               'waitMs',
+              'waitForSelector',
               'scroll',
             ],
           },
@@ -57,6 +58,7 @@ const RESPONSE_SCHEMA = {
           value: { type: 'string' },
           title: { type: 'string' },
           ms: { type: 'number' },
+          timeoutMs: { type: 'number' },
           direction: { type: 'string', enum: ['up', 'down'] },
           pixels: { type: 'number' },
           descriptor: {
@@ -77,16 +79,17 @@ const RESPONSE_SCHEMA = {
 // ── System prompt (shared across all providers) ───────────────────────────────
 const SYSTEM_PROMPT = `You are TabPilot, a collaborative browser automation assistant. Output ONLY a single JSON object — no markdown.
 Schema: {"explanation":"string","actions":[...]}
-Actions: openTab(url), closeTab(tabId), switchTab(tabId), navigateTo(tabId,url), clickElement(tabId,selector), fillForm(tabId,selector,value), getPageContent(tabId), groupTabs(tabIds,title?), waitMs(ms), scroll(tabId,direction,pixels).
+Actions: openTab(url), closeTab(tabId), switchTab(tabId), navigateTo(tabId,url), clickElement(tabId,selector), fillForm(tabId,selector,value), getPageContent(tabId), groupTabs(tabIds,title?), waitMs(ms), waitForSelector(tabId,selector,timeoutMs?), scroll(tabId,direction,pixels).
 Rules:
 - You are an autonomous agent capable of executing multi-step tasks.
-- ALWAYS propose the entire sequence of actions needed to achieve the final goal.
-- If a task involves searching and playing, you MUST include the final click to play the content. 
+- ALWAYS propose the entire sequence of actions needed to achieve the final goal. Do not stop halfway.
+- If a task involves multiple steps (e.g. searching, waiting for results, clicking a result, then interacting with that result), include ALL of them in your first response.
+- Avoid using waitMs(ms) for page loads or search results; instead, use waitForSelector with a relevant selector (e.g. ".ytd-video-renderer" for YouTube results) to make the execution dynamic and smart.
 - A complete search-and-play sequence typically looks like: 
   1. navigateTo/openTab to the site.
   2. fillForm in the search box.
   3. clickElement on the search button/magnifying glass.
-  4. waitMs(2000) to allow results to load.
+  4. waitForSelector(tabId, ".result-item-selector") to wait for results to appear.
   5. clickElement on the most relevant search result/video thumbnail.
 - If a direct URL fails or an element isn't found, you will receive "Execution Feedback". Use it to self-correct and PIVOT your strategy.
 - If a site returns a 404 or fails to load, try searching for the correct page (e.g. via Google or YouTube).
@@ -122,6 +125,10 @@ const ACTION_TYPE_ALIASES: Record<string, TabAction['type']> = {
   wait: 'waitMs',
   waitms: 'waitMs',
   wait_ms: 'waitMs',
+  waitforselector: 'waitForSelector',
+  wait_for_selector: 'waitForSelector',
+  waitforelement: 'waitForSelector',
+  wait_for_element: 'waitForSelector',
   scroll: 'scroll',
   scrolldown: 'scroll',
   scrolleddown: 'scroll',
@@ -388,6 +395,16 @@ function normalizeAndValidateResponse(
         return { type, ms: ms != null ? Math.max(0, Math.floor(ms)) : 500 }
       }
 
+      case 'waitForSelector': {
+        const tabId = readNumber(action.tabId) ?? activeTabId
+        const selector = typeof action.selector === 'string' ? action.selector.trim() : ''
+        const timeoutMs = readNumber(action.timeoutMs) ?? 10_000
+        if (tabId == null || !selector) {
+          throw new Error(`waitForSelector action missing tabId/selector at index ${index}`)
+        }
+        return { type, tabId, selector, timeoutMs }
+      }
+
       case 'scroll': {
         const tabId = readNumber(action.tabId) ?? activeTabId
         if (tabId == null) {
@@ -398,6 +415,10 @@ function normalizeAndValidateResponse(
         return { type, tabId, direction, pixels }
       }
     }
+    // Added a safety throw to satisfy TypeScript that this function always returns correctly.
+    throw new Error(
+      `Execution error: failed to normalize action type ${(type as string) || 'unknown'}`
+    )
   })
 
   return { explanation, actions: normalized }
@@ -672,6 +693,28 @@ async function* parseSseStream(
   }
 }
 
+// ── Mock streaming (for testing) ──────────────────────────────────────────────
+async function* streamMock(): AsyncGenerator<string> {
+  log('Mock AI request start')
+  // We can inject a mock response into local storage specifically for a test.
+  const result = (await chrome.storage.local.get('mock_ai_response')) as {
+    mock_ai_response?: string
+  }
+  const response =
+    result.mock_ai_response ||
+    JSON.stringify({
+      explanation: 'I am a mock assistant. I will try to open google.',
+      actions: [{ type: 'openTab', url: 'https://www.google.com' }],
+    })
+
+  // Simulate slow streaming
+  for (let i = 1; i <= response.length; i++) {
+    yield response.slice(0, i)
+    // 5ms delay per char
+    await new Promise((r) => setTimeout(r, 5))
+  }
+}
+
 // ── Main inference call (streaming) ──────────────────────────────────────────
 // onChunk receives the FULL cumulative response text so far (not a per-token delta).
 export async function promptToActions(
@@ -734,6 +777,8 @@ export async function promptToActions(
     generator = streamAnthropic(context, settings, history, signal)
   } else if (settings.provider === 'gemini') {
     generator = streamGemini(context, settings, history, signal)
+  } else if (settings.provider === 'mock') {
+    generator = streamMock()
   } else {
     generator = streamChrome(context, history, signal)
   }

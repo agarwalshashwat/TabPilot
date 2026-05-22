@@ -29,6 +29,7 @@ const PROVIDER_LABELS: Record<AIProvider, string> = {
   openai: 'OpenAI',
   anthropic: 'Claude',
   gemini: 'Gemini',
+  mock: 'Mock System',
 }
 
 const CHAT_HISTORY_KEY = 'chat_history'

@@ -19,7 +19,8 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
-    "test": "node ./node_modules/@playwright/test/cli.js test"
+    "test": "node ./node_modules/@playwright/test/cli.js test",
+    "repro": "node ./node_modules/@playwright/test/cli.js test tests/e2e/task-repro.spec.ts"
   },
   "dependencies": {
     "puppeteer": "^25.0.4",

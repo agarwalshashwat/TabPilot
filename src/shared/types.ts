@@ -50,6 +50,12 @@ export interface WaitMsAction {
   type: 'waitMs'
   ms: number
 }
+export interface WaitForSelectorAction {
+  type: 'waitForSelector'
+  tabId: number
+  selector: string
+  timeoutMs?: number
+}
 
 export interface ScrollAction {
   type: 'scroll'
@@ -68,6 +74,7 @@ export type TabAction =
   | GetPageContentAction
   | GroupTabsAction
   | WaitMsAction
+  | WaitForSelectorAction
   | ScrollAction
 
 // ── AI response shape ─────────────────────────────────────────────────────────
@@ -97,7 +104,7 @@ export type AIAvailability =
 
 // ── AI Provider settings ──────────────────────────────────────────────────────
 
-export type AIProvider = 'chrome' | 'openai' | 'anthropic' | 'gemini'
+export type AIProvider = 'chrome' | 'openai' | 'anthropic' | 'gemini' | 'mock'
 
 export interface AISettings {
   provider: AIProvider
@@ -111,6 +118,12 @@ export interface AISettings {
 
 export type TaskStatus = 'idle' | 'running' | 'success' | 'error'
 export type SidepanelView = 'chat' | 'recent' | 'routines' | 'memory'
+
+export interface TraceEntry {
+  timestamp: number
+  event: string
+  data?: unknown
+}
 
 export interface AgentMemory {
   id: string

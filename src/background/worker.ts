@@ -4,6 +4,7 @@ import type {
   TabInfo,
   Routine,
   TabAction,
+  TraceEntry,
 } from '../shared/types'
 import {
   checkAvailability,
@@ -107,11 +108,20 @@ chrome.runtime.onConnect.addListener((port) => {
           currentAbortController = new AbortController()
           const { signal } = currentAbortController
 
+          const trace: TraceEntry[] = []
+          const record = (event: string, data?: unknown) => {
+            const entry: TraceEntry = { timestamp: Date.now(), event, data }
+            trace.push(entry)
+            log(`Trace: ${event}`, data)
+          }
+
           try {
             let retryCount = 0
             const MAX_RETRIES = 3
             let currentPrompt = msg.prompt
             let executionSuccess = false
+
+            record('task_start', { originalPrompt: msg.prompt })
 
             while (retryCount < MAX_RETRIES && !executionSuccess) {
               try {
@@ -120,6 +130,8 @@ chrome.runtime.onConnect.addListener((port) => {
                 let latestStreamText = ''
                 let lastPostedStreamTextLength = 0
                 let lastPostedStreamAt = 0
+
+                record('iteration_start', { retryCount, currentPrompt, tabCount: tabs.length })
 
                 // Signal that the AI is about to start generating.
                 safePost({ type: 'AI_THINKING' } satisfies WorkerOutboundMessage)
@@ -147,6 +159,11 @@ chrome.runtime.onConnect.addListener((port) => {
                   },
                   signal
                 )
+
+                record('ai_plan', {
+                  explanation: aiResponse.explanation,
+                  actions: aiResponse.actions,
+                })
 
                 if (latestStreamText.length > lastPostedStreamTextLength) {
                   safePost({
@@ -182,6 +199,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 const result = await executeActions(
                   aiResponse.actions,
                   (progress) => {
+                    record('action_progress', progress)
                     const progressMsg: WorkerOutboundMessage = {
                       type: 'ACTION_PROGRESS',
                       ...progress,
@@ -190,6 +208,8 @@ chrome.runtime.onConnect.addListener((port) => {
                   },
                   signal
                 )
+
+                record('execution_success', { pageContentsCount: result.pageContents.length })
 
                 log('Action execution complete', {
                   pageContents: result.pageContents.length,
@@ -205,18 +225,26 @@ chrome.runtime.onConnect.addListener((port) => {
                 }
 
                 executionSuccess = true
+                record('task_complete', { success: true })
+                await chrome.storage.local.set({ last_trace: trace })
                 safePost({ type: 'TASK_COMPLETE' } satisfies WorkerOutboundMessage)
                 log('EXECUTE_PROMPT complete')
               } catch (err) {
-                if ((err as Error).message === 'Task cancelled') return
-
-                retryCount++
-                if (retryCount >= MAX_RETRIES) {
-                  throw err
+                if ((err as Error).message === 'Task cancelled') {
+                  record('task_cancelled', {})
+                  return
                 }
 
                 const errorStr = err instanceof Error ? err.message : String(err)
                 const failedAction = (err as Error & { action?: TabAction }).action
+                record('execution_failure', { error: errorStr, action: failedAction, retryCount })
+
+                retryCount++
+                if (retryCount >= MAX_RETRIES) {
+                  record('task_complete', { success: false, finalError: errorStr })
+                  await chrome.storage.local.set({ last_trace: trace })
+                  throw err
+                }
                 let feedback = `Execution Feedback: The previous plan failed with error: "${errorStr}".`
 
                 // If we know which tab failed, try to get its content to help the AI diagnose.

@@ -9,6 +9,7 @@ const PROVIDER_LABELS: Record<AIProvider, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic (Claude)',
   gemini: 'Google Gemini',
+  mock: 'Mock System',
 }
 
 const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo']
@@ -27,6 +28,7 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
     openai: false,
     anthropic: false,
     gemini: false,
+    mock: false,
   })
   const [isSaving, setIsSaving] = useState(false)
 
@@ -219,6 +221,42 @@ export function SettingsModal({ onClose, onSettingsChanged }: Props) {
             </div>
           </div>
         )}
+
+        <div
+          className="settings-field-group"
+          style={{ marginTop: '1rem', borderTop: '1px solid #efeff1', paddingTop: '1rem' }}
+        >
+          <label className="settings-label">Diagnostics</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <button
+              className="btn-ghost"
+              style={{ width: '100%', textAlign: 'center', justifyContent: 'center' }}
+              onClick={async () => {
+                const result = await chrome.storage.local.get('last_trace')
+                const trace = result.last_trace
+                if (!trace) {
+                  alert('No trace found. Run a task first.')
+                  return
+                }
+                const blob = new Blob([JSON.stringify(trace, null, 2)], {
+                  type: 'application/json',
+                })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `tabpilot-trace-${Date.now()}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+              type="button"
+            >
+              Download Last Trace
+            </button>
+            <p className="settings-note">
+              Share this JSON file with the agent to diagnose failures.
+            </p>
+          </div>
+        </div>
 
         <div className="modal-buttons">
           <button className="btn-ghost" onClick={onClose}>

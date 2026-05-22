@@ -361,6 +361,37 @@ function domScroll(direction: 'up' | 'down', pixels: number): { success: boolean
   return { success: true }
 }
 
+async function domWaitForSelector(
+  selector: string,
+  timeoutMs: number
+): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const check = () => {
+      const el = document.querySelector(selector)
+      if (el) {
+        const rect = el.getBoundingClientRect()
+        const style = window.getComputedStyle(el)
+        const visible =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        if (visible) {
+          resolve({ success: true })
+          return
+        }
+      }
+      if (Date.now() - start > timeoutMs) {
+        resolve({ success: false, error: `Timed out waiting for selector "${selector}"` })
+        return
+      }
+      setTimeout(check, 100)
+    }
+    check()
+  })
+}
+
 interface DomActionResult {
   success: boolean
   error?: string
@@ -744,6 +775,25 @@ async function runAction(
       // Cap at 10 s to prevent runaway waits.
       await new Promise<void>((resolve) => setTimeout(resolve, Math.min(action.ms, 10_000)))
       return { pageContent: null }
+
+    case 'waitForSelector': {
+      await waitForTabLoad(action.tabId, signal)
+      // Default timeout of 10s if not specified.
+      const timeout = action.timeoutMs ?? 10_000
+      const res = await chrome.scripting.executeScript({
+        target: { tabId: action.tabId },
+        func: domWaitForSelector,
+        args: [action.selector, timeout],
+      })
+      const result = res[0]?.result ?? {
+        success: false,
+        error: 'No result from waitForSelector script',
+      }
+      if (!result.success) {
+        throw new Error(result.error ?? 'waitForSelector failed')
+      }
+      return { pageContent: null }
+    }
 
     case 'scroll': {
       await waitForTabLoad(action.tabId, signal)

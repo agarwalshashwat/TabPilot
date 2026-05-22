@@ -10,14 +10,6 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const extensionPath = resolve(__dirname, '../../dist')
 
-async function resetExtensionStorage(page: import('@playwright/test').Page) {
-  await page.evaluate(async () => {
-    const c = (globalThis as { chrome: typeof chrome }).chrome
-    await new Promise<void>((resolve) => c.storage.sync.clear(() => resolve()))
-    await new Promise<void>((resolve) => c.storage.local.clear(() => resolve()))
-  })
-}
-
 async function launchSidepanel() {
   const baseTmpDir = process.env.TMPDIR || tmpdir()
   const profileDir = mkdtempSync(join(baseTmpDir, 'tabpilot-pw-'))
@@ -48,10 +40,12 @@ async function launchSidepanel() {
   }
 
   const extensionId = new URL(serviceWorker.url()).hostname
+
+  // Using a persistent context with a temporary profile directory already
+  // ensures a clean state, so we don't strictly need resetExtensionStorage.
   const page = await context.newPage()
   await page.goto(`chrome-extension://${extensionId}/sidepanel.html`)
-  await resetExtensionStorage(page)
-  await page.reload()
+  await page.waitForSelector('#root')
 
   return { context, serviceWorker, extensionId, page }
 }
