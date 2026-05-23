@@ -84,7 +84,8 @@ Rules:
 - You are an autonomous agent capable of executing multi-step tasks.
 - ALWAYS propose the entire sequence of actions needed to achieve the final goal. Do not stop halfway.
 - If a task involves multiple steps (e.g. searching, waiting for results, clicking a result, then interacting with that result), include ALL of them in your first response.
-- Avoid using waitMs(ms) for page loads or search results; instead, use waitForSelector with a relevant selector (e.g. ".ytd-video-renderer" for YouTube results) to make the execution dynamic and smart.
+- For YouTube: after navigating to results, wait for "ytd-video-renderer" and click the video title (usually "a#video-title").
+- Avoid using waitMs(ms) for page loads or search results; instead, use waitForSelector with a relevant selector (e.g. "ytd-video-renderer" for YouTube results) to make the execution dynamic and smart.
 - A complete search-and-play sequence typically looks like: 
   1. navigateTo/openTab to the site.
   2. fillForm in the search box.
@@ -433,6 +434,9 @@ export async function checkChromeAIAvailability(): Promise<AIAvailability> {
 export async function checkAvailability(): Promise<AIAvailability> {
   const settings = await getSettings()
   log('Checking availability', { provider: settings.provider })
+  if (settings.provider === 'mock') {
+    return 'available'
+  }
   if (settings.provider === 'chrome') {
     return checkChromeAIAvailability()
   }
@@ -694,18 +698,34 @@ async function* parseSseStream(
 }
 
 // ── Mock streaming (for testing) ──────────────────────────────────────────────
-async function* streamMock(): AsyncGenerator<string> {
-  log('Mock AI request start')
+async function* streamMock(prompt?: string): AsyncGenerator<string> {
+  log('Mock AI request start', { prompt })
   // We can inject a mock response into local storage specifically for a test.
   const result = (await chrome.storage.local.get('mock_ai_response')) as {
     mock_ai_response?: string
   }
-  const response =
+
+  let response =
     result.mock_ai_response ||
     JSON.stringify({
       explanation: 'I am a mock assistant. I will try to open google.',
       actions: [{ type: 'openTab', url: 'https://www.google.com' }],
     })
+
+  // Specialized mock logic for the Grand Prix scenario to test the multi-step loop
+  if (prompt?.toLowerCase().includes('grand prix')) {
+    response = JSON.stringify({
+      explanation: 'I will search for a Grand Prix video on YouTube and play it for you.',
+      actions: [
+        {
+          type: 'openTab',
+          url: 'https://www.youtube.com/results?search_query=formula+1+grand+prix+highlights',
+        },
+        { type: 'waitForSelector', tabId: 0, selector: 'ytd-video-renderer', timeout: 10000 },
+        { type: 'clickElement', tabId: 0, selector: 'ytd-video-renderer a#video-title' },
+      ],
+    })
+  }
 
   // Simulate slow streaming
   for (let i = 1; i <= response.length; i++) {
@@ -778,7 +798,7 @@ export async function promptToActions(
   } else if (settings.provider === 'gemini') {
     generator = streamGemini(context, settings, history, signal)
   } else if (settings.provider === 'mock') {
-    generator = streamMock()
+    generator = streamMock(context)
   } else {
     generator = streamChrome(context, history, signal)
   }
@@ -897,6 +917,10 @@ Make sure to:
     }
     const data = await response.json()
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? userPrompt
+  }
+
+  if (settings.provider === 'mock') {
+    return userPrompt
   }
 
   // Chrome AI (Gemini Nano)

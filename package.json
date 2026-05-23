@@ -20,7 +20,8 @@
     "prepare": "husky",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
     "test": "node ./node_modules/@playwright/test/cli.js test",
-    "repro": "node ./node_modules/@playwright/test/cli.js test tests/e2e/task-repro.spec.ts"
+    "repro": "node ./node_modules/@playwright/test/cli.js test tests/e2e/task-repro.spec.ts",
+    "test:gp": "node ./node_modules/@playwright/test/cli.js test tests/e2e/youtube-gp.spec.ts"
   },
   "dependencies": {
     "puppeteer": "^25.0.4",
