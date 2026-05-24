@@ -6,36 +6,7 @@
 
 <p align="center"><b>Your browser. Your agent.</b></p>
 
-# TabPilot
-
 TabPilot is a free, open-source Chrome extension that uses local AI (Gemini Nano) to plan and execute tab actions—no cloud, no fees, no data sharing. Boost your productivity and privacy with AI-powered tab automation, right in your browser.
-
-## Why Open Source?
-
-TabPilot is open source to empower users with transparency, privacy, and control. By making the code public, we:
-
-- Enable community-driven innovation
-- Build trust—no hidden data collection
-- Let anyone audit, contribute, or extend the project
-- Keep the core experience free for everyone
-
-## How to Contribute
-
-We welcome contributions of all kinds! You can:
-
-- Suggest features or report bugs via [GitHub Issues](https://github.com/agarwalshashwat/TabPilot/issues)
-- Join discussions and share ideas in [GitHub Discussions](https://github.com/agarwalshashwat/TabPilot/discussions)
-- Submit pull requests for code, docs, or tests
-- Help with translations, design, or outreach
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-## Community & Support
-
-- **Website:** [https://yourdomain.com/tabpilot](https://yourdomain.com/tabpilot) <!-- Update with your subdomain -->
-- **GitHub Discussions:** [TabPilot Discussions](https://github.com/agarwalshashwat/TabPilot/discussions)
-- **Sponsor:** [GitHub Sponsors](https://github.com/sponsors/agarwalshashwat) <!-- Update if enabled -->
-- **Contact:** Open an issue or join the discussion!
 
 ## Features
 
@@ -251,3 +222,30 @@ npx playwright install chromium
 - CI workflow runs format, lint, build, and tests.
 - Tag a release with vX.Y.Z to trigger GitHub release packaging.
 - Use CHANGELOG.md and Semantic Versioning for release notes.
+
+## Why Open Source?
+
+TabPilot is open source to empower users with transparency, privacy, and control. By making the code public, we:
+
+- Enable community-driven innovation
+- Build trust—no hidden data collection
+- Let anyone audit, contribute, or extend the project
+- Keep the core experience free for everyone
+
+## How to Contribute
+
+We welcome contributions of all kinds! You can:
+
+- Suggest features or report bugs via [GitHub Issues](https://github.com/agarwalshashwat/TabPilot/issues)
+- Join discussions and share ideas in [GitHub Discussions](https://github.com/agarwalshashwat/TabPilot/discussions)
+- Submit pull requests for code, docs, or tests
+- Help with translations, design, or outreach
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Community & Support
+
+- **Project Home:** [https://github.com/agarwalshashwat/TabPilot](https://github.com/agarwalshashwat/TabPilot)
+- **GitHub Discussions:** [TabPilot Discussions](https://github.com/agarwalshashwat/TabPilot/discussions)
+- **Sponsor:** [GitHub Sponsors](https://github.com/sponsors/agarwalshashwat)
+- **Contact:** Open an issue or join the discussion!
