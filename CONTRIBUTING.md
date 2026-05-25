@@ -48,6 +48,20 @@ Please include:
 - E2E tests are under `tests/e2e`.
 - Sidepanel UI code is under `src/sidepanel` and worker code is under `src/background`.
 
+## Add A Platform Without Core Code Changes
+
+Use the platform pack workflow to extend behavior for your own websites/use cases:
+
+1. Start from `src/background/platforms/data/pack-template.json`.
+2. Add a new playbook object into `src/background/platforms/data/playbooks.json`.
+3. Add platform notes from `docs/platform-playbooks/pack-template.md`.
+4. Keep selectors/hints/policies inside the pack; avoid editing worker/planner/executor unless adding new generic capabilities.
+5. Run:
+   - `npm run typecheck`
+   - `npm run format:check`
+
+If a playbook is invalid, TabPilot skips it and prints diagnostics under `[TAP][platforms]` in extension logs.
+
 ## Testing Guidance
 
 - Keep deterministic checks in CI

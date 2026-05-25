@@ -1,0 +1,34 @@
+{
+  "id": "youtube",
+  "name": "My Platform",
+  "specVersion": "1.0.0",
+  "minTabPilotVersion": "0.1.0",
+  "documentationPath": "docs/platform-playbooks/my-platform.md",
+  "hostPatterns": ["^(?:www\\.)?example\\.com$"],
+  "urlPatterns": ["example\\.com"],
+  "promptKeywords": ["example", "search", "open"],
+  "pageMarkers": ["#search", "main"],
+  "selectorAliases": {
+    "searchInput": "input[name=\"q\"]",
+    "resultItem": ".result-card",
+    "resultLink": ".result-card a"
+  },
+  "plannerHints": [
+    "Search first, then open a semantically relevant result.",
+    "Prefer stable IDs and aria-label selectors over brittle class chains."
+  ],
+  "recoveryHints": [
+    "If target content is missing, run a fresh on-site search.",
+    "Avoid reusing stale selectors from a different page mode."
+  ],
+  "verificationHints": [
+    "Task succeeds only when the target detail page is visible.",
+    "A generic click is not enough if URL/state did not transition."
+  ],
+  "executionPolicy": {
+    "strictSearchQuerySanitization": true,
+    "preferredResultSelectors": [".result-card a"],
+    "disallowedClickSelectors": [".promo-banner a"],
+    "requireWatchUrlForSuccess": false
+  }
+}

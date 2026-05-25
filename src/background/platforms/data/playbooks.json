@@ -1,0 +1,277 @@
+[
+  {
+    "id": "youtube",
+    "name": "YouTube",
+    "specVersion": "1.0.0",
+    "minTabPilotVersion": "0.1.0",
+    "documentationPath": "docs/platform-playbooks/youtube.md",
+    "hostPatterns": ["^(?:www\\.)?youtube\\.com$", "^m\\.youtube\\.com$", "^youtu\\.be$"],
+    "urlPatterns": ["youtube\\.com/watch", "youtube\\.com/results", "youtu\\.be/"],
+    "promptKeywords": ["youtube", "video", "watch", "play", "playlist", "channel", "subscribe"],
+    "pageMarkers": ["ytd-app", "ytd-searchbox", "ytd-video-renderer", "ytd-watch-flexy"],
+    "selectorAliases": {
+      "searchInput": "input#search",
+      "searchButton": "button[aria-label*=\"Search\"]",
+      "resultItem": "ytd-video-renderer",
+      "resultLink": "ytd-video-renderer a#video-title",
+      "watchVideo": "video"
+    },
+    "plannerHints": [
+      "Use the search box, wait for results, then click the first relevant video title.",
+      "Prefer ytd-video-renderer or search-result-renderer when waiting for results.",
+      "If a watch page does not open, treat the run as incomplete and re-evaluate the result click."
+    ],
+    "recoveryHints": [
+      "Search YouTube instead of navigating directly to a watch URL when a result is needed.",
+      "If the result page is unstable, verify the active tab is on youtube.com/watch before declaring success."
+    ],
+    "verificationHints": [
+      "Success should require a watch page with a playing video element.",
+      "A generic button click is not enough if playback never starts."
+    ],
+    "executionPolicy": {
+      "strictSearchQuerySanitization": true,
+      "preferredResultSelectors": ["ytd-video-renderer a#video-title"],
+      "disallowedClickSelectors": ["#collapsed-title", "a#endpoint"],
+      "requireWatchUrlForSuccess": true
+    }
+  },
+  {
+    "id": "google-search",
+    "name": "Google Search",
+    "hostPatterns": ["^(?:www\\.)?google\\.[a-z.]+$"],
+    "urlPatterns": ["google\\.[a-z.]+/search"],
+    "promptKeywords": ["google", "search", "find", "lookup", "look up", "search for"],
+    "pageMarkers": ["input[name=\"q\"]", "textarea[name=\"q\"]", "#search", "#searchform"],
+    "selectorAliases": {
+      "searchInput": "input[name=\"q\"]",
+      "searchButton": "button[type=\"submit\"], input[type=\"submit\"]",
+      "resultLink": "a h3",
+      "resultTitle": "h3"
+    },
+    "plannerHints": [
+      "Search terms belong in the main query box before clicking the submit button.",
+      "Wait for search results to load before clicking a result.",
+      "If the direct page is missing, fall back to a web search query first."
+    ],
+    "recoveryHints": [
+      "Use Google search when direct navigation fails or a page looks wrong.",
+      "Prefer the primary search input rather than site-specific controls when the page is ambiguous."
+    ],
+    "verificationHints": [
+      "A search task succeeds when results are visible and the intended result is opened."
+    ]
+  },
+  {
+    "id": "gmail",
+    "name": "Gmail",
+    "hostPatterns": ["^(?:mail\\.)?google\\.com$"],
+    "urlPatterns": ["mail\\.google\\.com"],
+    "promptKeywords": ["gmail", "email", "mail", "inbox", "compose", "send an email"],
+    "pageMarkers": [
+      "[aria-label*=\"Compose\"]",
+      "table[role=\"grid\"]",
+      "input[aria-label*=\"Search mail\"]"
+    ],
+    "selectorAliases": {
+      "composeButton": "[aria-label*=\"Compose\"]",
+      "searchInput": "input[aria-label*=\"Search mail\"]",
+      "inboxRow": "table[role=\"grid\"] tr"
+    },
+    "plannerHints": [
+      "Use the search mail box for locating conversations before composing or replying.",
+      "Compose actions usually begin with the Compose button and end with Send."
+    ],
+    "recoveryHints": [
+      "If Gmail loads slowly, wait for the inbox grid before selecting mail actions.",
+      "When a mailbox is not obvious, search first instead of guessing message threads."
+    ],
+    "verificationHints": [
+      "Check for the expected thread, draft, or sent state before calling the task done."
+    ]
+  },
+  {
+    "id": "google-maps",
+    "name": "Google Maps",
+    "hostPatterns": ["^(?:www\\.)?google\\.[a-z.]+$", "^maps\\.google\\.com$"],
+    "urlPatterns": ["maps\\.google\\."],
+    "promptKeywords": ["map", "maps", "directions", "location", "near me", "route"],
+    "pageMarkers": [
+      "input#searchboxinput",
+      "[aria-label*=\"Directions\"]",
+      "[aria-label*=\"Search Google Maps\"]"
+    ],
+    "selectorAliases": {
+      "searchInput": "input#searchboxinput",
+      "directionsButton": "[aria-label*=\"Directions\"]",
+      "resultCard": "[role=\"article\"]"
+    },
+    "plannerHints": [
+      "Start with the search box, then use directions or place details once the target place is visible.",
+      "Maps tasks often need an explicit zoom, route, or place selection step after search."
+    ],
+    "recoveryHints": [
+      "If the place result is not visible, search by the exact place name or address again.",
+      "Prefer the Maps search input over other page controls when recovering from ambiguity."
+    ],
+    "verificationHints": [
+      "A maps task should end on the intended place, route, or directions panel."
+    ]
+  },
+  {
+    "id": "amazon",
+    "name": "Amazon",
+    "hostPatterns": ["^(?:www\\.)?amazon\\.[a-z.]+$"],
+    "urlPatterns": ["amazon\\."],
+    "promptKeywords": ["amazon", "buy", "price", "product", "cart", "order"],
+    "pageMarkers": [
+      "#twotabsearchtextbox",
+      "[data-component-type=\"s-search-result\"]",
+      "[aria-label*=\"Cart\"]"
+    ],
+    "selectorAliases": {
+      "searchInput": "#twotabsearchtextbox",
+      "resultCard": "[data-component-type=\"s-search-result\"]",
+      "cartButton": "[aria-label*=\"Cart\"]"
+    },
+    "plannerHints": [
+      "Search first, then open the best matching result before interacting with product details.",
+      "Add-to-cart and checkout flows usually need a result page and a product detail page."
+    ],
+    "recoveryHints": [
+      "If the exact item page is missing, search Amazon again with a tighter product query.",
+      "Use the product list results rather than free-form page controls when recovering."
+    ],
+    "verificationHints": [
+      "A successful shopping task should reach the expected product, cart, or checkout state."
+    ]
+  },
+  {
+    "id": "facebook",
+    "name": "Facebook",
+    "hostPatterns": ["^(?:www\\.)?facebook\\.com$", "^m\\.facebook\\.com$"],
+    "urlPatterns": ["facebook\\.com"],
+    "promptKeywords": ["facebook", "feed", "post", "profile", "message", "share"],
+    "pageMarkers": ["[role=\"feed\"]", "[aria-label*=\"Create a post\"]", "[data-pagelet]"],
+    "selectorAliases": {
+      "feed": "[role=\"feed\"]",
+      "createPost": "[aria-label*=\"Create a post\"]",
+      "searchInput": "input[aria-label*=\"Search Facebook\"]"
+    },
+    "plannerHints": [
+      "Use the feed or search field to locate the person, page, or post before interacting.",
+      "Posting tasks often require opening the composer before entering text."
+    ],
+    "recoveryHints": [
+      "If the feed is noisy, use search to find the exact profile or page first.",
+      "Prefer stable accessible labels over visual-only controls when choosing actions."
+    ],
+    "verificationHints": [
+      "Verify the target post, message, or profile action actually appears after execution."
+    ]
+  },
+  {
+    "id": "instagram",
+    "name": "Instagram",
+    "hostPatterns": ["^(?:www\\.)?instagram\\.com$"],
+    "urlPatterns": ["instagram\\.com"],
+    "promptKeywords": ["instagram", "reel", "story", "post", "profile", "dm"],
+    "pageMarkers": ["article", "[role=\"dialog\"]", "[aria-label*=\"Search\"]"],
+    "selectorAliases": {
+      "searchInput": "input[aria-label*=\"Search\"]",
+      "postCard": "article",
+      "dialog": "[role=\"dialog\"]"
+    },
+    "plannerHints": [
+      "Search or open a profile before interacting with posts, reels, or messages.",
+      "Dialogs are common; wait for the page to settle before clicking inside overlays."
+    ],
+    "recoveryHints": [
+      "If the target content is hidden, search the profile or hashtag again.",
+      "Treat modal dialogs as a separate navigation step when recovery is needed."
+    ],
+    "verificationHints": [
+      "Confirm the intended post, reel, profile, or message view opened before finishing."
+    ]
+  },
+  {
+    "id": "linkedin",
+    "name": "LinkedIn",
+    "hostPatterns": ["^(?:www\\.)?linkedin\\.com$"],
+    "urlPatterns": ["linkedin\\.com"],
+    "promptKeywords": ["linkedin", "job", "profile", "message", "connect", "company"],
+    "pageMarkers": ["[data-test-id*=\"search\"]", ".search-global-typeahead", "[role=\"main\"]"],
+    "selectorAliases": {
+      "searchInput": ".search-global-typeahead input, [data-test-id*=\"search\"] input",
+      "resultCard": "[role=\"main\"]",
+      "connectButton": "[aria-label*=\"Connect\"]"
+    },
+    "plannerHints": [
+      "Search for the person, company, or job before trying to connect or message.",
+      "Many LinkedIn tasks require opening a profile or job detail page first."
+    ],
+    "recoveryHints": [
+      "If the page is not showing the expected profile, search LinkedIn again with the full name or company.",
+      "Prefer main content and visible profile controls over sidebar elements."
+    ],
+    "verificationHints": [
+      "Verify the profile, job, or message target is visible before marking success."
+    ]
+  },
+  {
+    "id": "reddit",
+    "name": "Reddit",
+    "hostPatterns": ["^(?:www\\.)?reddit\\.com$"],
+    "urlPatterns": ["reddit\\.com"],
+    "promptKeywords": ["reddit", "subreddit", "post", "comment", "upvote"],
+    "pageMarkers": [
+      "shreddit-app",
+      "[data-testid=\"post-container\"]",
+      "[aria-label*=\"Search Reddit\"]"
+    ],
+    "selectorAliases": {
+      "searchInput": "[aria-label*=\"Search Reddit\"]",
+      "postCard": "[data-testid=\"post-container\"]",
+      "commentsLink": "a[href*=\"comments\"]"
+    },
+    "plannerHints": [
+      "Search by subreddit or topic first, then open the most relevant post or comment thread.",
+      "Reddit often needs a thread open before actions like commenting or voting make sense."
+    ],
+    "recoveryHints": [
+      "If the target thread is not visible, search the subreddit or post title again.",
+      "Use the post container as the stable target when recovering from layout shifts."
+    ],
+    "verificationHints": [
+      "A Reddit task should end on the intended thread, post, or subreddit page."
+    ]
+  },
+  {
+    "id": "x-twitter",
+    "name": "X / Twitter",
+    "hostPatterns": ["^(?:www\\.)?x\\.com$", "^(?:www\\.)?twitter\\.com$"],
+    "urlPatterns": ["x\\.com", "twitter\\.com"],
+    "promptKeywords": ["x", "twitter", "tweet", "post", "reply", "thread", "retweet"],
+    "pageMarkers": [
+      "[data-testid=\"tweet\"]",
+      "[aria-label*=\"Post text\"]",
+      "[aria-label*=\"Timeline\"]"
+    ],
+    "selectorAliases": {
+      "searchInput": "[aria-label*=\"Search\"]",
+      "tweetCard": "[data-testid=\"tweet\"]",
+      "composeButton": "[aria-label*=\"Post text\"]"
+    },
+    "plannerHints": [
+      "Search or open the timeline before trying to reply, post, or open a thread.",
+      "Use tweet cards as the main unit when choosing a post to open."
+    ],
+    "recoveryHints": [
+      "If the timeline is not obvious, use search or the profile page to find the target tweet.",
+      "Do not treat a generic button click as success unless the tweet or thread is visible."
+    ],
+    "verificationHints": [
+      "Confirm the expected tweet, thread, or posting surface is actually visible."
+    ]
+  }
+]

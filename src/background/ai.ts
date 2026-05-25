@@ -424,6 +424,65 @@ function preferExistingTabOnRetry(
   })
 }
 
+function enforceYouTubeRetrySearchPlanIfNeeded(
+  actions: TabAction[],
+  tabs: TabInfo[],
+  userPrompt: string,
+  activeTabId: number | null
+): TabAction[] {
+  if (!isRetryContextPrompt(userPrompt) || !isYouTubePlayIntent(userPrompt)) return actions
+
+  const activeTab =
+    (activeTabId != null ? tabs.find((tab) => tab.id === activeTabId) : null) ??
+    tabs.find((tab) => tab.active)
+  if (!activeTab || !/youtube\.com\/watch/i.test(activeTab.url)) return actions
+
+  const hasSearchTransition = actions.some(
+    (action) =>
+      action.type === 'navigateTo' &&
+      /youtube\.com\/(results\?|$)|youtube\.com\/results/i.test(action.url)
+  )
+  const hasResultWait = actions.some(
+    (action) =>
+      action.type === 'waitForSelector' &&
+      /ytd-video-renderer|ytd-rich-item-renderer|search-result-renderer/i.test(action.selector)
+  )
+  const hasResultClick = actions.some(
+    (action) =>
+      action.type === 'clickElement' &&
+      /video-title|ytd-video-renderer|ytd-rich-item-renderer/i.test(action.selector)
+  )
+
+  if (hasSearchTransition && hasResultWait && hasResultClick) return actions
+
+  const query = deriveSearchQuery(userPrompt)
+  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query || 'latest canadian grand prix 2026 full race')}`
+
+  return [
+    {
+      type: 'navigateTo',
+      tabId: activeTab.id,
+      url: searchUrl,
+    },
+    {
+      type: 'waitForSelector',
+      tabId: activeTab.id,
+      selector: 'ytd-video-renderer',
+      timeoutMs: 12_000,
+    },
+    {
+      type: 'clickElement',
+      tabId: activeTab.id,
+      selector: 'ytd-video-renderer a#video-title',
+      descriptor: {
+        intent: 'open and play the best semantic match for the requested video',
+        label: query || 'requested video result',
+        role: 'link',
+      },
+    },
+  ]
+}
+
 function normalizeAndValidateResponse(
   raw: { explanation?: unknown; actions?: unknown[] },
   userPrompt: string,
@@ -570,7 +629,13 @@ function normalizeAndValidateResponse(
   })
 
   const retryAdjusted = preferExistingTabOnRetry(normalized, tabs, userPrompt, activeTabId)
-  const completedPlan = augmentYouTubeSearchPlanIfNeeded(retryAdjusted, userPrompt, activeTabId)
+  const retryHardened = enforceYouTubeRetrySearchPlanIfNeeded(
+    retryAdjusted,
+    tabs,
+    userPrompt,
+    activeTabId
+  )
+  const completedPlan = augmentYouTubeSearchPlanIfNeeded(retryHardened, userPrompt, activeTabId)
   return { explanation, actions: completedPlan }
 }
 
@@ -984,7 +1049,7 @@ export async function promptToActions(
   }
   const normalized = normalizeAndValidateResponse(
     parsed as unknown as { explanation?: unknown; actions?: unknown[] },
-    canonicalUserPrompt?.trim() || userPrompt,
+    userPrompt,
     activeTabId,
     tabs
   )

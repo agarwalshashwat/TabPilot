@@ -47,10 +47,105 @@ interface VerificationResult {
 interface YouTubePlaybackState {
   href: string
   title: string
+  channel: string
   hasVideo: boolean
   paused: boolean
   currentTime: number
   readyState: number
+}
+
+function normalizeTargetText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractYouTubeTargetQuery(prompt: string): string {
+  const quoted = prompt.match(/["']([^"']{3,})["']/)
+  if (quoted?.[1]) return quoted[1].trim()
+
+  const normalized = prompt
+    .replace(/verification feedback:[\s\S]*$/i, '')
+    .replace(/execution feedback:[\s\S]*$/i, '')
+    .trim()
+
+  const searchForMatch = normalized.match(/search\s+for\s+(.+?)(?:\.|$)/i)
+  if (searchForMatch?.[1]) {
+    return searchForMatch[1].replace(/play\s+the\s+.*$/i, '').trim()
+  }
+
+  const playMatch = normalized.match(/play\s+(.+?)(?:\s+on\s+youtube|\.|$)/i)
+  if (playMatch?.[1]) return playMatch[1].trim()
+
+  return normalized.slice(0, 140)
+}
+
+function buildTargetTerms(query: string): string[] {
+  const stop = new Set([
+    'the',
+    'a',
+    'an',
+    'on',
+    'in',
+    'for',
+    'to',
+    'and',
+    'video',
+    'youtube',
+    'play',
+    'watch',
+    'search',
+    'results',
+  ])
+
+  return normalizeTargetText(query)
+    .split(' ')
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 3 && !stop.has(part))
+}
+
+function computeMatchScore(terms: string[], title: string, channel: string): number {
+  if (terms.length === 0) return 1
+  const haystack = `${normalizeTargetText(title)} ${normalizeTargetText(channel)}`.trim()
+  if (!haystack) return 0
+  let hitCount = 0
+  for (const term of terms) {
+    if (haystack.includes(term)) hitCount += 1
+  }
+  return hitCount / terms.length
+}
+
+async function readActiveYouTubePlaybackState(tabId: number): Promise<YouTubePlaybackState | null> {
+  try {
+    const scriptResult = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const video = document.querySelector('video') as HTMLVideoElement | null
+        const titleEl =
+          document.querySelector('ytd-watch-metadata h1 yt-formatted-string') ??
+          document.querySelector('h1.title yt-formatted-string') ??
+          document.querySelector('h1')
+        const channelEl =
+          document.querySelector('#channel-name a') ?? document.querySelector('ytd-channel-name a')
+
+        return {
+          href: location.href,
+          title: (titleEl?.textContent ?? document.title ?? '').trim(),
+          channel: (channelEl?.textContent ?? '').trim(),
+          hasVideo: !!video,
+          paused: video?.paused ?? true,
+          currentTime: video?.currentTime ?? 0,
+          readyState: video?.readyState ?? 0,
+        }
+      },
+    })
+
+    return (scriptResult[0]?.result as YouTubePlaybackState | undefined) ?? null
+  } catch {
+    return null
+  }
 }
 
 function isYouTubePlayIntent(prompt: string): boolean {
@@ -101,35 +196,58 @@ async function verifyTaskOutcome(
       return { success: false, reason }
     }
 
-    const scriptResult = await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      func: () => {
-        const video = document.querySelector('video') as HTMLVideoElement | null
-        return {
-          href: location.href,
-          title: document.title,
-          hasVideo: !!video,
-          paused: video?.paused ?? true,
-          currentTime: video?.currentTime ?? 0,
-          readyState: video?.readyState ?? 0,
-        }
-      },
-    })
+    const targetQuery = extractYouTubeTargetQuery(originalPrompt)
+    const targetTerms = buildTargetTerms(targetQuery)
 
-    const playback = scriptResult[0]?.result as YouTubePlaybackState | undefined
-    if (!playback) {
+    const VERIFY_WINDOW_MS = 8_000
+    const POLL_MS = 450
+    const verifyStart = Date.now()
+    let highestTime = 0
+    let lastState: YouTubePlaybackState | null = null
+    let sawPlayback = false
+
+    while (Date.now() - verifyStart < VERIFY_WINDOW_MS) {
+      const state = await readActiveYouTubePlaybackState(activeTab.id)
+      if (state) {
+        lastState = state
+        highestTime = Math.max(highestTime, state.currentTime)
+        const playbackLikelyStarted =
+          state.hasVideo &&
+          (!state.paused || state.currentTime > 0.25 || state.readyState >= 2 || highestTime > 0.25)
+        if (playbackLikelyStarted) {
+          sawPlayback = true
+          const score = computeMatchScore(targetTerms, state.title, state.channel)
+          const semanticPass = targetTerms.length <= 1 ? score >= 0.5 : score >= 0.6
+          if (semanticPass) {
+            return { success: true }
+          }
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+    }
+
+    if (!lastState) {
       return {
         success: false,
         reason: 'Could not read YouTube playback state after clicking the result.',
       }
     }
 
-    const isPlaying = playback.hasVideo && !playback.paused && playback.currentTime > 0.25
-    if (!isPlaying) {
+    const finalScore = computeMatchScore(targetTerms, lastState.title, lastState.channel)
+    if (sawPlayback && finalScore < 0.6) {
       return {
         success: false,
-        reason: `Opened the YouTube watch page (${playback.href}), but playback did not start.`,
+        reason:
+          `Wrong video matched target "${targetQuery}". ` +
+          `Current title: "${lastState.title}".` +
+          ` Re-search YouTube with a stricter match.`,
       }
+    }
+
+    return {
+      success: false,
+      reason: `Opened the YouTube watch page (${lastState.href}), but playback did not start.`,
     }
   }
 
@@ -372,7 +490,22 @@ chrome.runtime.onConnect.addListener((port) => {
                     )
                   }
 
-                  currentPrompt = `Verification Feedback: ${verification.reason ?? 'Execution did not satisfy the user goal.'}\n\nPlease revise your strategy to achieve the user's goal: "${msg.prompt}".`
+                  let retryGuidance = `Verification Feedback: ${verification.reason ?? 'Execution did not satisfy the user goal.'}`
+
+                  if (isYouTubePlayIntent(msg.prompt)) {
+                    const currentTabs = await getTabContext().catch(() => [])
+                    const currentActive = currentTabs.find((tab) => tab.active)
+                    if (currentActive && /youtube\.com\/watch/i.test(currentActive.url)) {
+                      const target = extractYouTubeTargetQuery(msg.prompt)
+                      retryGuidance +=
+                        `\n\nCurrent state: active YouTube watch page is ${currentActive.url}.` +
+                        `\nDo not wait for result selectors on this page.` +
+                        `\nPerform a fresh YouTube search for "${target}", wait for ytd-video-renderer,` +
+                        ` and open the best semantic match.`
+                    }
+                  }
+
+                  currentPrompt = `${retryGuidance}\n\nPlease revise your strategy to achieve the user's goal: "${msg.prompt}".`
                   warn(
                     `Retrying EXECUTE_PROMPT after verification (attempt ${retryCount}/${MAX_RETRIES})`,
                     {
