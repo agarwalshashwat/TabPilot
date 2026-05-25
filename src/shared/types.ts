@@ -201,10 +201,21 @@ export interface RephrasedPromptMessage {
   prompt: string
 }
 
+export type VerificationStageStatus = 'running' | 'passed' | 'failed'
+
+export interface TaskVerificationMessage {
+  type: 'TASK_VERIFICATION'
+  status: VerificationStageStatus
+  attempt: number
+  maxAttempts: number
+  reason?: string
+}
+
 export type WorkerOutboundMessage =
   | AIAvailabilityMessage
   | AIResponseMessage
   | ActionProgressMessage
+  | TaskVerificationMessage
   | TaskCompleteMessage
   | TaskErrorMessage
   | DownloadProgressMessage

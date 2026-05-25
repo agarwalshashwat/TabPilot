@@ -367,23 +367,87 @@ async function domWaitForSelector(
 ): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve) => {
     const start = Date.now()
+    let attemptedYouTubeSubmit = false
+
+    const isYouTubeHost = /(^|\.)youtube\.com$/i.test(location.hostname)
+
+    const isYouTubeResultSelector = (value: string): boolean =>
+      /ytd-video-renderer|ytd-rich-item-renderer|ytd-compact-video-renderer|ytd-playlist-renderer|ytd-search-renderer|search-result-renderer/i.test(
+        value
+      )
+
+    const isVisible = (el: Element): boolean => {
+      if (!(el instanceof HTMLElement)) return false
+      const rect = el.getBoundingClientRect()
+      const style = window.getComputedStyle(el)
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden'
+      )
+    }
+
+    const maybeFindYouTubeResult = (): Element | null => {
+      const requested = document.querySelector(selector)
+      if (requested) return requested
+      if (!isYouTubeHost || !isYouTubeResultSelector(selector)) return null
+      return document.querySelector(
+        'ytd-video-renderer, ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-playlist-renderer'
+      )
+    }
+
+    const maybeSubmitYouTubeSearch = () => {
+      if (!isYouTubeHost || attemptedYouTubeSubmit) return
+      if (!isYouTubeResultSelector(selector) && !/search-result-renderer/i.test(selector)) return
+      if (location.pathname === '/results') return
+      if (Date.now() - start < 1200) return
+
+      const button = document.querySelector<HTMLElement>(
+        'button#search-icon-legacy, #search-icon-legacy button, ytd-searchbox #search-icon-legacy'
+      )
+      const input = document.querySelector<HTMLInputElement>('input#search')
+
+      attemptedYouTubeSubmit = true
+      button?.click()
+      if (input) {
+        input.focus({ preventScroll: true })
+        input.dispatchEvent(
+          new Event('input', {
+            bubbles: true,
+          })
+        )
+        input.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+          })
+        )
+        input.dispatchEvent(
+          new KeyboardEvent('keyup', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+          })
+        )
+      }
+    }
+
     const check = () => {
-      const el = document.querySelector(selector)
+      maybeSubmitYouTubeSearch()
+      const el = maybeFindYouTubeResult()
       if (el) {
-        const rect = el.getBoundingClientRect()
-        const style = window.getComputedStyle(el)
-        const visible =
-          rect.width > 0 &&
-          rect.height > 0 &&
-          style.display !== 'none' &&
-          style.visibility !== 'hidden'
-        if (visible) {
+        if (isVisible(el)) {
           resolve({ success: true })
           return
         }
       }
       if (Date.now() - start > timeoutMs) {
-        resolve({ success: false, error: `Timed out waiting for selector "${selector}"` })
+        resolve({
+          success: false,
+          error: `Timed out waiting for selector "${selector}" at ${location.href}`,
+        })
         return
       }
       setTimeout(check, 100)
@@ -556,6 +620,9 @@ export async function executeActions(
   const overlaidTabs = new Set<number>()
   // Track the most recently opened tab so we can remap stale tabIds.
   let lastOpenedTabId: number | null = null
+  // Track the tab that was active when the last openTab ran.
+  // Follow-up actions that still point at this tab are usually stale.
+  let lastOpenedFromTabId: number | null = null
   const pageContents: string[] = []
 
   try {
@@ -565,13 +632,14 @@ export async function executeActions(
       let action = actions[i]
       log('Action begin', { index: i, type: action.type, action })
 
-      // Remap tabId to the most recently opened tab when the referenced tab
-      // is not scriptable (e.g. AI used the old active-tab ID after openTab).
-      if ('tabId' in action && lastOpenedTabId != null) {
-        const needsRemap = await shouldRemapTabId(
-          (action as { tabId: number }).tabId,
-          lastOpenedTabId
-        )
+      if (action.type === 'openTab') {
+        const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true })
+        lastOpenedFromTabId = activeTabs.find((tab) => tab.id != null)?.id ?? null
+      }
+
+      // Remap stale follow-up actions to the tab created by the most recent openTab.
+      if ('tabId' in action && lastOpenedTabId != null && lastOpenedFromTabId != null) {
+        const needsRemap = shouldRemapTabId(action, lastOpenedTabId, lastOpenedFromTabId)
         if (needsRemap) {
           log('Remapping tabId', {
             index: i,
@@ -639,8 +707,8 @@ async function runAction(
       const tab = await chrome.tabs.create({ url: sanitizeUrl(action.url) })
       // Wait for the tab to finish loading so subsequent actions can script it.
       if (tab.id != null) {
-        await waitForTabLoad(tab.id, signal)
         onOpenedTab?.(tab.id)
+        await waitForTabLoad(tab.id, signal)
 
         // Post-load diagnostic: check for obvious error states like 404s.
         try {
@@ -813,18 +881,28 @@ async function runAction(
 }
 
 // ── Tab ID remapping ──────────────────────────────────────────────────────────
-// Returns true when the given tabId should be replaced with lastOpenedTabId.
-// This happens when the AI used the old active-tab ID after an openTab action.
-async function shouldRemapTabId(tabId: number, lastOpenedTabId: number): Promise<boolean> {
+// Returns true when the given action still points at the tab that existed
+// before openTab and should therefore be redirected to the new tab.
+function shouldRemapTabId(
+  action: TabAction,
+  lastOpenedTabId: number,
+  lastOpenedFromTabId: number
+): boolean {
+  if (!('tabId' in action)) return false
+
+  const tabId = action.tabId
   if (tabId === lastOpenedTabId) return false
-  try {
-    const tab = await chrome.tabs.get(tabId)
-    // Remap if the referenced tab is already loaded on a non-scriptable URL.
-    return tab.status === 'complete' && !isScriptable(tab)
-  } catch {
-    // Tab no longer exists — remap to lastOpenedTabId.
-    return true
-  }
+  if (tabId !== lastOpenedFromTabId) return false
+
+  return (
+    action.type === 'navigateTo' ||
+    action.type === 'clickElement' ||
+    action.type === 'fillForm' ||
+    action.type === 'getPageContent' ||
+    action.type === 'waitForSelector' ||
+    action.type === 'scroll' ||
+    action.type === 'switchTab'
+  )
 }
 
 // ── Tab load helper ───────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import type {
   ActionSelectionDebug,
   AIAvailability,
+  VerificationStageStatus,
   Routine,
   SavedAction,
   TabAction,
@@ -30,6 +31,13 @@ type HookDispatchAction =
     }
   | { type: 'SET_TASK_COMPLETE' }
   | { type: 'SET_TASK_ERROR'; error: string }
+  | {
+      type: 'SET_TASK_VERIFICATION'
+      status: VerificationStageStatus
+      attempt: number
+      maxAttempts: number
+      reason?: string
+    }
   | { type: 'SET_DOWNLOAD_PROGRESS'; loaded: number; total: number }
   | { type: 'SET_AI_THINKING' }
   | { type: 'SET_THINKING_TEXT'; text: string }
@@ -93,6 +101,15 @@ export function useChromeMessages(dispatch: DispatchFn): {
           break
         case 'TASK_COMPLETE':
           dispatch({ type: 'SET_TASK_COMPLETE' })
+          break
+        case 'TASK_VERIFICATION':
+          dispatch({
+            type: 'SET_TASK_VERIFICATION',
+            status: msg.status,
+            attempt: msg.attempt,
+            maxAttempts: msg.maxAttempts,
+            reason: msg.reason,
+          })
           break
         case 'TASK_ERROR':
           dispatch({ type: 'SET_TASK_ERROR', error: msg.error })

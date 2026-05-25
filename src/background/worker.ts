@@ -13,6 +13,7 @@ import {
   destroySession,
   rephraseUserPrompt,
 } from './ai'
+import { formatPlatformContextBlock, resolvePlatformContext } from './platforms'
 import { executeActions } from './executor'
 import {
   loadRoutines,
@@ -37,6 +38,103 @@ const error = (...args: unknown[]) => {
 
 const STREAM_CHUNK_THROTTLE_MS = 150
 const STREAM_CHUNK_MIN_DELTA_CHARS = 120
+
+interface VerificationResult {
+  success: boolean
+  reason?: string
+}
+
+interface YouTubePlaybackState {
+  href: string
+  title: string
+  hasVideo: boolean
+  paused: boolean
+  currentTime: number
+  readyState: number
+}
+
+function isYouTubePlayIntent(prompt: string): boolean {
+  const text = prompt.toLowerCase()
+  const asksYouTube = /\byoutube\b|\byt\b/.test(text)
+  const asksPlay = /\bplay\b|\bwatch\b/.test(text)
+  const asksResultClick =
+    /(first|top)\s+(result|video)/.test(text) ||
+    /click\s+the\s+(first|top)\s+(result|video)/.test(text)
+  return asksYouTube && (asksPlay || asksResultClick)
+}
+
+async function verifyTaskOutcome(
+  originalPrompt: string,
+  actions: TabAction[]
+): Promise<VerificationResult> {
+  if (isYouTubePlayIntent(originalPrompt)) {
+    const hasResultsWait = actions.some(
+      (action) =>
+        action.type === 'waitForSelector' &&
+        /ytd-video-renderer|ytd-rich-item-renderer/i.test(action.selector)
+    )
+    const hasClickResult = actions.some(
+      (action) =>
+        action.type === 'clickElement' &&
+        /video-title|ytd-video-renderer|ytd-rich-item-renderer/i.test(action.selector)
+    )
+
+    if (!hasResultsWait || !hasClickResult) {
+      return {
+        success: false,
+        reason:
+          'Execution finished without opening a YouTube result. Need wait-for-results and click-first-video steps.',
+      }
+    }
+
+    const tabs = await getTabContext()
+    const activeTab = tabs.find((tab) => tab.active)
+    if (!activeTab) {
+      return { success: false, reason: 'Could not inspect the active tab after execution.' }
+    }
+
+    const watchUrl = /youtube\.com\/watch/i.test(activeTab.url)
+    if (!watchUrl) {
+      const reason = activeTab.url
+        ? `Expected YouTube to open a watch page, but the active tab stayed on ${activeTab.url}.`
+        : 'Expected YouTube to open a watch page, but the active tab had no readable URL.'
+      return { success: false, reason }
+    }
+
+    const scriptResult = await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      func: () => {
+        const video = document.querySelector('video') as HTMLVideoElement | null
+        return {
+          href: location.href,
+          title: document.title,
+          hasVideo: !!video,
+          paused: video?.paused ?? true,
+          currentTime: video?.currentTime ?? 0,
+          readyState: video?.readyState ?? 0,
+        }
+      },
+    })
+
+    const playback = scriptResult[0]?.result as YouTubePlaybackState | undefined
+    if (!playback) {
+      return {
+        success: false,
+        reason: 'Could not read YouTube playback state after clicking the result.',
+      }
+    }
+
+    const isPlaying = playback.hasVideo && !playback.paused && playback.currentTime > 0.25
+    if (!isPlaying) {
+      return {
+        success: false,
+        reason: `Opened the YouTube watch page (${playback.href}), but playback did not start.`,
+      }
+    }
+  }
+
+  return { success: true }
+}
 
 // ── Open the side panel when the extension toolbar icon is clicked ────────────
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
@@ -157,7 +255,8 @@ chrome.runtime.onConnect.addListener((port) => {
                     lastPostedStreamAt = now
                     lastPostedStreamTextLength = text.length
                   },
-                  signal
+                  signal,
+                  msg.prompt
                 )
 
                 record('ai_plan', {
@@ -224,11 +323,64 @@ chrome.runtime.onConnect.addListener((port) => {
                   } satisfies WorkerOutboundMessage)
                 }
 
-                executionSuccess = true
-                record('task_complete', { success: true })
-                await chrome.storage.local.set({ last_trace: trace })
-                safePost({ type: 'TASK_COMPLETE' } satisfies WorkerOutboundMessage)
-                log('EXECUTE_PROMPT complete')
+                const attemptNumber = retryCount + 1
+                safePost({
+                  type: 'TASK_VERIFICATION',
+                  status: 'running',
+                  attempt: attemptNumber,
+                  maxAttempts: MAX_RETRIES,
+                } satisfies WorkerOutboundMessage)
+
+                const verification = await verifyTaskOutcome(msg.prompt, aiResponse.actions)
+                record('verification_result', {
+                  success: verification.success,
+                  reason: verification.reason,
+                  attempt: attemptNumber,
+                })
+
+                if (verification.success) {
+                  safePost({
+                    type: 'TASK_VERIFICATION',
+                    status: 'passed',
+                    attempt: attemptNumber,
+                    maxAttempts: MAX_RETRIES,
+                  } satisfies WorkerOutboundMessage)
+                  executionSuccess = true
+                  record('task_complete', { success: true })
+                  await chrome.storage.local.set({ last_trace: trace })
+                  safePost({ type: 'TASK_COMPLETE' } satisfies WorkerOutboundMessage)
+                  log('EXECUTE_PROMPT complete')
+                } else {
+                  safePost({
+                    type: 'TASK_VERIFICATION',
+                    status: 'failed',
+                    attempt: attemptNumber,
+                    maxAttempts: MAX_RETRIES,
+                    reason: verification.reason,
+                  } satisfies WorkerOutboundMessage)
+
+                  retryCount++
+                  if (retryCount >= MAX_RETRIES) {
+                    record('task_complete', {
+                      success: false,
+                      finalError: verification.reason,
+                      phase: 'verification',
+                    })
+                    await chrome.storage.local.set({ last_trace: trace })
+                    throw new Error(
+                      `${verification.reason ?? 'Verification failed.'} Please retry manually with a more specific prompt.`
+                    )
+                  }
+
+                  currentPrompt = `Verification Feedback: ${verification.reason ?? 'Execution did not satisfy the user goal.'}\n\nPlease revise your strategy to achieve the user's goal: "${msg.prompt}".`
+                  warn(
+                    `Retrying EXECUTE_PROMPT after verification (attempt ${retryCount}/${MAX_RETRIES})`,
+                    {
+                      reason: verification.reason,
+                    }
+                  )
+                  continue
+                }
               } catch (err) {
                 if ((err as Error).message === 'Task cancelled') {
                   record('task_cancelled', {})
@@ -238,6 +390,14 @@ chrome.runtime.onConnect.addListener((port) => {
                 const errorStr = err instanceof Error ? err.message : String(err)
                 const failedAction = (err as Error & { action?: TabAction }).action
                 record('execution_failure', { error: errorStr, action: failedAction, retryCount })
+
+                safePost({
+                  type: 'TASK_VERIFICATION',
+                  status: 'failed',
+                  attempt: retryCount + 1,
+                  maxAttempts: MAX_RETRIES,
+                  reason: `Execution failed before verification: ${errorStr}`,
+                } satisfies WorkerOutboundMessage)
 
                 retryCount++
                 if (retryCount >= MAX_RETRIES) {
@@ -299,7 +459,20 @@ chrome.runtime.onConnect.addListener((port) => {
         case 'REPHRASE_PROMPT': {
           log('REPHRASE_PROMPT received', { prompt: msg.prompt })
           try {
-            const rephrased = await rephraseUserPrompt(msg.prompt).catch((err) => {
+            const tabs = await getTabContext()
+            const activeTab = tabs.find((tab) => tab.active)
+            const platformContextBlock = formatPlatformContextBlock(
+              resolvePlatformContext({
+                prompt: msg.prompt,
+                tabs,
+                activeTabId: activeTab?.id ?? null,
+              })
+            )
+            const rephrased = await rephraseUserPrompt(
+              msg.prompt,
+              undefined,
+              platformContextBlock
+            ).catch((err) => {
               warn('rephraseUserPrompt failed, fallback to original', err)
               return msg.prompt
             })

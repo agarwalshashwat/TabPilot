@@ -7,6 +7,10 @@ interface Props {
   taskStatus: TaskStatus
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled action type: ${JSON.stringify(value)}`)
+}
+
 const STATUS_ICONS: Record<ActionWithStatus['status'], string> = {
   pending: '○',
   running: '●',
@@ -34,11 +38,14 @@ function formatAction(action: TabAction): string {
       return `Group tabs [${action.tabIds.join(', ')}]${action.title ? ` → "${action.title}"` : ''}`
     case 'waitMs':
       return `Wait ${action.ms} ms`
+    case 'waitForSelector': {
+      const timeout = action.timeoutMs ?? 10_000
+      return `Wait for [${action.selector}] on tab #${action.tabId} (${timeout} ms)`
+    }
     case 'scroll':
       return `Scroll ${action.direction} ${action.pixels}px on tab #${action.tabId}`
-    default:
-      return `Unknown action (${(action as { type?: string }).type ?? 'unknown'})`
   }
+  return assertNever(action)
 }
 
 function formatDebug(debug: ActionWithStatus['debug']): string[] {

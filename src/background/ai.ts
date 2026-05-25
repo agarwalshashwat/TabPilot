@@ -9,6 +9,7 @@ import type {
   HistoryMessage,
 } from '../shared/types'
 import { getSettings } from './settings'
+import { formatPlatformContextBlock, resolvePlatformContext } from './platforms'
 
 const DEBUG_LOGS = true
 const LOG_PREFIX = '[TAP][ai]'
@@ -195,7 +196,19 @@ function readNumber(value: unknown): number | null {
 }
 
 function deriveSearchQuery(prompt: string): string {
-  const text = prompt.trim()
+  const cleaned = prompt
+    .split('\n')
+    .filter((line) => {
+      const l = line.trim()
+      if (!l) return false
+      if (/^execution feedback:/i.test(l)) return false
+      if (/^current content of the failing tab:/i.test(l)) return false
+      if (/^please revise your strategy/i.test(l)) return false
+      return true
+    })
+    .join(' ')
+
+  const text = cleaned.trim()
   if (!text) return ''
 
   const stripWrapper = (value: string): string =>
@@ -287,10 +300,135 @@ function readDescriptor(value: unknown): ElementDescriptor | undefined {
   }
 }
 
+function isYouTubePlayIntent(prompt: string): boolean {
+  const text = prompt.toLowerCase()
+  const asksYouTube = /\byoutube\b|\byt\b/.test(text)
+  const asksPlay = /\bplay\b|\bwatch\b/.test(text)
+  const asksResultClick =
+    /(first|top)\s+(result|video)/.test(text) ||
+    /click\s+the\s+(first|top)\s+(result|video)/.test(text)
+  return asksYouTube && (asksPlay || asksResultClick)
+}
+
+function isRetryContextPrompt(prompt: string): boolean {
+  return /^(execution|verification) feedback:/i.test(prompt.trim())
+}
+
+function findReusableTabId(tabs: TabInfo[], preferredTabId: number | null): number | null {
+  if (preferredTabId != null) {
+    const preferred = tabs.find((tab) => tab.id === preferredTabId)
+    if (preferred) return preferred.id
+  }
+
+  const youtubeTab = tabs.find((tab) => /youtube\.com/i.test(tab.url))
+  if (youtubeTab) return youtubeTab.id
+
+  return preferredTabId
+}
+
+function normalizeSelectorForPrompt(selector: string, userPrompt: string): string {
+  const trimmed = selector.trim()
+  if (!trimmed) return trimmed
+
+  const isYouTubeContext =
+    /\byoutube\b|youtube\.com|ytd-/i.test(userPrompt) || /ytd-|youtube/i.test(trimmed)
+  if (!isYouTubeContext) return trimmed
+
+  const compact = trimmed.toLowerCase().replace(/\s+/g, '')
+  if (compact === 'ytd-search-bar' || compact === 'ytd-searchbox') {
+    return 'input#search'
+  }
+  if (compact.includes('ytd-search-bar') || compact.includes('ytd-searchbox')) {
+    return trimmed.replace(/ytd-search-bar|ytd-searchbox/gi, 'input#search')
+  }
+
+  return trimmed
+}
+
+function augmentYouTubeSearchPlanIfNeeded(
+  actions: TabAction[],
+  userPrompt: string,
+  activeTabId: number | null
+): TabAction[] {
+  if (!isYouTubePlayIntent(userPrompt)) return actions
+
+  const hasClickAction = actions.some((action) => action.type === 'clickElement')
+  if (hasClickAction) return actions
+
+  const lastFill = [...actions]
+    .reverse()
+    .find(
+      (action): action is Extract<TabAction, { type: 'fillForm' }> => action.type === 'fillForm'
+    )
+  const lastYouTubeNavigate = [...actions]
+    .reverse()
+    .find(
+      (action): action is Extract<TabAction, { type: 'navigateTo' }> =>
+        action.type === 'navigateTo' && /youtube\.com/i.test(action.url)
+    )
+
+  const targetTabId = lastFill?.tabId ?? lastYouTubeNavigate?.tabId ?? activeTabId
+  if (targetTabId == null) return actions
+
+  const hasWaitForResults = actions.some(
+    (action) =>
+      action.type === 'waitForSelector' &&
+      action.tabId === targetTabId &&
+      /ytd-video-renderer|ytd-rich-item-renderer/i.test(action.selector)
+  )
+
+  const next = [...actions]
+  if (!hasWaitForResults) {
+    next.push({
+      type: 'waitForSelector',
+      tabId: targetTabId,
+      selector: 'ytd-video-renderer',
+      timeoutMs: 12_000,
+    })
+  }
+
+  next.push({
+    type: 'clickElement',
+    tabId: targetTabId,
+    selector: 'ytd-video-renderer a#video-title',
+    descriptor: {
+      intent: 'open and play the first video result',
+      label: 'first video result',
+      role: 'link',
+    },
+  })
+
+  return next
+}
+
+function preferExistingTabOnRetry(
+  actions: TabAction[],
+  tabs: TabInfo[],
+  userPrompt: string,
+  activeTabId: number | null
+): TabAction[] {
+  if (!isRetryContextPrompt(userPrompt)) return actions
+
+  const reusableTabId = findReusableTabId(tabs, activeTabId)
+  if (reusableTabId == null) return actions
+
+  return actions.map((action) => {
+    if (action.type !== 'openTab') return action
+
+    const url = action.url.trim()
+    return {
+      type: 'navigateTo',
+      tabId: reusableTabId,
+      url,
+    }
+  })
+}
+
 function normalizeAndValidateResponse(
   raw: { explanation?: unknown; actions?: unknown[] },
   userPrompt: string,
-  activeTabId: number | null
+  activeTabId: number | null,
+  tabs: TabInfo[]
 ): AIResponse {
   const explanation =
     typeof raw.explanation === 'string' && raw.explanation.trim()
@@ -356,7 +494,10 @@ function normalizeAndValidateResponse(
 
       case 'clickElement': {
         const tabId = readNumber(action.tabId) ?? activeTabId
-        const selector = typeof action.selector === 'string' ? action.selector.trim() : ''
+        const selector =
+          typeof action.selector === 'string'
+            ? normalizeSelectorForPrompt(action.selector, userPrompt)
+            : ''
         const descriptor = readDescriptor(action.descriptor)
         if (tabId == null || !selector) {
           throw new Error(`clickElement action missing tabId/selector at index ${index}`)
@@ -366,7 +507,10 @@ function normalizeAndValidateResponse(
 
       case 'fillForm': {
         const tabId = readNumber(action.tabId) ?? activeTabId
-        const selector = typeof action.selector === 'string' ? action.selector.trim() : ''
+        const selector =
+          typeof action.selector === 'string'
+            ? normalizeSelectorForPrompt(action.selector, userPrompt)
+            : ''
         const value = typeof action.value === 'string' ? action.value : ''
         const descriptor = readDescriptor(action.descriptor)
         if (tabId == null || !selector) {
@@ -398,7 +542,10 @@ function normalizeAndValidateResponse(
 
       case 'waitForSelector': {
         const tabId = readNumber(action.tabId) ?? activeTabId
-        const selector = typeof action.selector === 'string' ? action.selector.trim() : ''
+        const selector =
+          typeof action.selector === 'string'
+            ? normalizeSelectorForPrompt(action.selector, userPrompt)
+            : ''
         const timeoutMs = readNumber(action.timeoutMs) ?? 10_000
         if (tabId == null || !selector) {
           throw new Error(`waitForSelector action missing tabId/selector at index ${index}`)
@@ -422,7 +569,9 @@ function normalizeAndValidateResponse(
     )
   })
 
-  return { explanation, actions: normalized }
+  const retryAdjusted = preferExistingTabOnRetry(normalized, tabs, userPrompt, activeTabId)
+  const completedPlan = augmentYouTubeSearchPlanIfNeeded(retryAdjusted, userPrompt, activeTabId)
+  return { explanation, actions: completedPlan }
 }
 
 // ── Chrome AI (Gemini Nano) availability check ────────────────────────────────
@@ -743,17 +892,24 @@ export async function promptToActions(
   activeTabId: number | null,
   history: HistoryMessage[],
   onChunk: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  canonicalUserPrompt?: string
 ): Promise<AIResponse> {
   const settings = await getSettings()
   const storedMemories = await loadAgentMemories()
   const memories = await refreshMemoriesOnInjection(storedMemories)
+  const platformContext = resolvePlatformContext({
+    prompt: canonicalUserPrompt?.trim() || userPrompt,
+    tabs,
+    activeTabId,
+  })
+  const platformContextBlock = formatPlatformContextBlock(platformContext)
 
   // 1. Internal rephrasing: Translate "go to reddit" -> "Navigate to https://reddit.com"
   // This ensures the planning engine always sees explicit, site-neutral instructions.
   let refinedPrompt = userPrompt
   try {
-    refinedPrompt = await rephraseUserPrompt(userPrompt, signal)
+    refinedPrompt = await rephraseUserPrompt(userPrompt, signal, platformContextBlock)
     log('Prompt rephrased before planning', { original: userPrompt, rephrased: refinedPrompt })
   } catch (err) {
     warn('Rephrasing failed during planning, falling back to original', err)
@@ -765,6 +921,7 @@ export async function promptToActions(
     memories: memories.length,
     activeTabId,
     prompt: refinedPrompt,
+    platform: platformContext.primary?.playbook.id ?? null,
   })
 
   const tabList = tabs
@@ -776,6 +933,8 @@ export async function promptToActions(
     })
     .join('\n')
 
+  const platformContextLines = platformContextBlock ? ['', platformContextBlock] : []
+
   const context = [
     'Agent memory (persistent user preferences/facts):',
     memories.length > 0 ? memories.map((m, i) => `  ${i + 1}. ${m.text}`).join('\n') : '  (none)',
@@ -783,6 +942,7 @@ export async function promptToActions(
     `Open tabs (${tabs.length}):`,
     tabList || '  (none)',
     activeTabId != null ? `Active tab id: ${activeTabId}` : '',
+    ...platformContextLines,
     '',
     `User request: ${refinedPrompt}`,
   ]
@@ -824,8 +984,9 @@ export async function promptToActions(
   }
   const normalized = normalizeAndValidateResponse(
     parsed as unknown as { explanation?: unknown; actions?: unknown[] },
-    userPrompt,
-    activeTabId
+    canonicalUserPrompt?.trim() || userPrompt,
+    activeTabId,
+    tabs
   )
   log('promptToActions normalized response', {
     explanation: normalized.explanation,
@@ -836,7 +997,8 @@ export async function promptToActions(
 
 export async function rephraseUserPrompt(
   userPrompt: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  platformContextBlock?: string
 ): Promise<string> {
   const settings = await getSettings()
   log('rephraseUserPrompt start', { provider: settings.provider, prompt: userPrompt })
@@ -847,7 +1009,7 @@ Make sure to:
 1. Keep the user's core intent unchanged.
 2. If "Execution Feedback" is present (e.g. "Action failed: 404"), pivot the instruction to a recovery plan (e.g. "Search for [topic] on Google instead of direct navigation").
 3. Translate vague goals into explicit instructions.
-4. Output ONLY the optimized instruction. No preamble or conversational filler.`
+4. Output ONLY the optimized instruction. No preamble or conversational filler.${platformContextBlock ? `\n\n${platformContextBlock}` : ''}`
 
   if (settings.provider === 'openai') {
     const endpoint = 'https://api.openai.com/v1/chat/completions'

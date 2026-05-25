@@ -4,6 +4,7 @@ import type {
   AIAvailability,
   AgentMemory,
   AIProvider,
+  VerificationStageStatus,
   Routine,
   SavedAction,
   SidepanelView,
@@ -23,6 +24,7 @@ import { MemoryView } from './components/MemoryView'
 import { RecentChatsView } from './components/RecentChatsView'
 import { SaveRoutineModal } from './components/SaveRoutineModal'
 import { SettingsModal } from './components/SettingsModal'
+import { ExecutionInsights } from './components/ExecutionInsights'
 
 const PROVIDER_LABELS: Record<AIProvider, string> = {
   chrome: 'Gemini Nano',
@@ -177,6 +179,12 @@ interface AppState {
   messages: ChatMessage[]
   lastUserPrompt: string
   currentActions: ActionWithStatus[]
+  verification: {
+    status: VerificationStageStatus | 'idle'
+    attempt: number
+    maxAttempts: number
+    reason?: string
+  }
   taskStatus: TaskStatus
   aiAvailability: AIAvailability | null
   downloadProgress: { loaded: number; total: number } | null
@@ -208,6 +216,13 @@ export type AppAction =
     }
   | { type: 'SET_TASK_COMPLETE' }
   | { type: 'SET_TASK_ERROR'; error: string }
+  | {
+      type: 'SET_TASK_VERIFICATION'
+      status: VerificationStageStatus
+      attempt: number
+      maxAttempts: number
+      reason?: string
+    }
   | { type: 'SET_DOWNLOAD_PROGRESS'; loaded: number; total: number }
   | { type: 'SET_AI_THINKING' }
   | { type: 'SET_THINKING_TEXT'; text: string }
@@ -226,6 +241,11 @@ const initialState: AppState = {
   messages: [],
   lastUserPrompt: '',
   currentActions: [],
+  verification: {
+    status: 'idle',
+    attempt: 0,
+    maxAttempts: 3,
+  },
   taskStatus: 'idle',
   aiAvailability: null,
   downloadProgress: null,
@@ -254,6 +274,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         messages: action.messages,
         lastUserPrompt,
         currentActions: [],
+        verification: { status: 'idle', attempt: 0, maxAttempts: 3 },
         taskStatus: 'idle',
         isThinking: false,
         thinkingText: '',
@@ -267,6 +288,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         lastUserPrompt: action.content,
         currentActions: [],
+        verification: { status: 'idle', attempt: 0, maxAttempts: 3 },
         taskStatus: 'running',
         isThinking: false,
         thinkingText: '',
@@ -322,10 +344,25 @@ function reducer(state: AppState, action: AppAction): AppState {
     case 'SET_TASK_COMPLETE':
       return { ...state, taskStatus: 'success', isThinking: false, thinkingText: '' }
 
+    case 'SET_TASK_VERIFICATION':
+      return {
+        ...state,
+        verification: {
+          status: action.status,
+          attempt: action.attempt,
+          maxAttempts: action.maxAttempts,
+          reason: action.reason,
+        },
+      }
+
     case 'SET_TASK_ERROR':
       return {
         ...state,
         taskStatus: 'error',
+        verification:
+          state.verification.status === 'running'
+            ? { ...state.verification, status: 'failed', reason: action.error }
+            : state.verification,
         isThinking: false,
         thinkingText: '',
         messages: [
@@ -370,6 +407,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         messages: [],
         lastUserPrompt: '',
         currentActions: [],
+        verification: { status: 'idle', attempt: 0, maxAttempts: 3 },
         taskStatus: 'idle',
         isThinking: false,
         thinkingText: '',
@@ -408,6 +446,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         lastUserPrompt: action.prompt,
         currentActions: [],
+        verification: { status: 'idle', attempt: 0, maxAttempts: 3 },
         taskStatus: 'running',
         isThinking: false,
         thinkingText: '',
@@ -682,6 +721,58 @@ export default function App() {
     [chatStore.threads, cancelTask]
   )
 
+  const handleDeleteRecentChat = useCallback(
+    (chatId: string) => {
+      cancelTask()
+
+      let nextActiveChatId: string | null = null
+      let nextMessages: ChatMessage[] = []
+
+      setChatStore((prev) => {
+        const threads = { ...prev.threads }
+        const updatedAtById = { ...prev.updatedAtById }
+
+        delete threads[chatId]
+        delete updatedAtById[chatId]
+
+        const remainingIds = Object.keys(threads)
+        if (remainingIds.length > 0) {
+          const sorted = [...remainingIds].sort(
+            (a, b) => (updatedAtById[b] ?? 0) - (updatedAtById[a] ?? 0)
+          )
+          nextActiveChatId =
+            prev.activeChatId && threads[prev.activeChatId]
+              ? prev.activeChatId
+              : (sorted[0] ?? null)
+          nextMessages = nextActiveChatId ? (threads[nextActiveChatId] ?? []) : []
+        } else {
+          nextActiveChatId = null
+          nextMessages = []
+        }
+
+        const nextStore = applyChatCapacity({
+          activeChatId: nextActiveChatId,
+          threads,
+          updatedAtById,
+        })
+
+        nextActiveChatId = nextStore.activeChatId
+        nextMessages = nextActiveChatId ? (nextStore.threads[nextActiveChatId] ?? []) : []
+
+        return nextStore
+      })
+
+      if (nextActiveChatId) {
+        dispatch({ type: 'LOAD_HISTORY', messages: nextMessages })
+      } else {
+        dispatch({ type: 'CLEAR_CHAT' })
+      }
+
+      dispatch({ type: 'SET_ACTIVE_VIEW', view: 'recent' })
+    },
+    [cancelTask]
+  )
+
   const canStartNewChat = state.messages.length > 0 || state.taskStatus === 'running'
 
   const handleAddMemory = useCallback(
@@ -774,6 +865,14 @@ export default function App() {
             onSuggestionClick={(text) => handleSubmit(text)}
           />
           {state.isThinking && <ThinkingBubble rawJson={state.thinkingText} />}
+          {(state.isThinking || state.currentActions.length > 0) && (
+            <ExecutionInsights
+              isThinking={state.isThinking}
+              taskStatus={state.taskStatus}
+              actions={state.currentActions}
+              verification={state.verification}
+            />
+          )}
           {state.pendingRoutine &&
             state.taskStatus === 'success' &&
             !state.showSaveRoutineModal && (
@@ -792,6 +891,7 @@ export default function App() {
           chats={recentChats}
           activeChatId={chatStore.activeChatId}
           onSelect={handleSelectRecentChat}
+          onDelete={handleDeleteRecentChat}
         />
       ) : state.activeView === 'routines' ? (
         <RoutinesView routines={state.routines} onRun={handleRunRoutine} onDelete={deleteRoutine} />

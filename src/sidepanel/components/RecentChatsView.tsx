@@ -9,6 +9,7 @@ interface Props {
   chats: RecentChatItem[]
   activeChatId: string | null
   onSelect: (chatId: string) => void
+  onDelete: (chatId: string) => void
 }
 
 function formatRelativeTime(ts: number): string {
@@ -23,7 +24,7 @@ function formatRelativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString()
 }
 
-export function RecentChatsView({ chats, activeChatId, onSelect }: Props) {
+export function RecentChatsView({ chats, activeChatId, onSelect, onDelete }: Props) {
   return (
     <div className="recent-chats-view">
       <div className="recent-chats-header">
@@ -38,19 +39,29 @@ export function RecentChatsView({ chats, activeChatId, onSelect }: Props) {
         <ul className="recent-chats-list">
           {chats.map((chat) => (
             <li key={chat.id}>
-              <button
-                className={`recent-chat-card${activeChatId === chat.id ? ' active' : ''}`}
-                onClick={() => onSelect(chat.id)}
-              >
-                <div className="recent-chat-title" title={chat.title}>
-                  {chat.title}
-                </div>
-                <div className="recent-chat-meta">
-                  <span>{chat.messageCount} msgs</span>
-                  <span>•</span>
-                  <span>{formatRelativeTime(chat.updatedAt)}</span>
-                </div>
-              </button>
+              <div className={`recent-chat-card${activeChatId === chat.id ? ' active' : ''}`}>
+                <button className="recent-chat-main" onClick={() => onSelect(chat.id)}>
+                  <div className="recent-chat-title" title={chat.title}>
+                    {chat.title}
+                  </div>
+                  <div className="recent-chat-meta">
+                    <span>{chat.messageCount} msgs</span>
+                    <span>•</span>
+                    <span>{formatRelativeTime(chat.updatedAt)}</span>
+                  </div>
+                </button>
+                <button
+                  className="btn-delete recent-chat-delete"
+                  title="Delete chat"
+                  aria-label={`Delete chat ${chat.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onDelete(chat.id)
+                  }}
+                >
+                  🗑
+                </button>
+              </div>
             </li>
           ))}
         </ul>
